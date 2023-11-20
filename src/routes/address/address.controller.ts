@@ -14,7 +14,6 @@ export class AddressController {
 
   @ApiTags('address')
   @Get(':address/utxo')
-  @ApiQuery({ name: 'address', required: true, type: String })
   @ApiQuery({ name: 'flag', required: false, type: String })
   utxo(@Param('address') address: string, @Query('flag') flag: string) {
     return this.addressService.utxo(address, flag);

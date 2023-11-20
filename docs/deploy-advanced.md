@@ -110,7 +110,7 @@ PORT=15000
 version: '3'
 services:
   mvc-assets-indexer:
-    image: ghcr.io/mvc-labs/mvc-assets-indexer:v1.0.0
+    image: ghcr.io/mvc-labs/mvc-assets-indexer:v1.0.1
     restart: always
     ports:
       - "15000:15000"
