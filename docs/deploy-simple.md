@@ -63,7 +63,7 @@ NODE_DATA_PATH=/node/.mvc
 version: '3'
 services:
   mvc-assets-indexer:
-    image: ghcr.io/mvc-labs/mvc-assets-indexer:v1.0.1
+    image: ghcr.io/mvc-labs/mvc-assets-indexer:v1.1.0
     restart: always
     ports:
       - "15000:15000"
