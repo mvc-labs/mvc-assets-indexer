@@ -608,75 +608,23 @@ export class BlockService implements OnApplicationBootstrap {
   }
 
   private async forwardReorg(newChainTipsBlock: BlockEntity) {
-    // chaintips -> reorgBlock
-    /*
-      beforeChainTips -> ->  \
-      newChainTips -> -> -> -> node == reorgBlock
-    */
-    let beforeChainTipsBlock = await this.blockEntityRepository.findOne({
-      where: {
-        is_chaintips: true,
-      },
-    });
-    if (!beforeChainTipsBlock) {
-      const blockInfoList = await this.blockEntityRepository.find({
-        take: 1,
-        order: {
-          time: 'desc',
-        },
-      });
-      beforeChainTipsBlock = blockInfoList[0];
-    }
     const reorgList = [];
-    const hashCount = {};
-    let newLinkNode = newChainTipsBlock;
-    let beforeLinkNode = beforeChainTipsBlock;
-    const newList = [newChainTipsBlock];
-    const oldList = [beforeChainTipsBlock];
+    let tempChainTipsBlock = newChainTipsBlock;
     while (true) {
-      if (newLinkNode.hash === beforeLinkNode.hash) {
-        break;
-      }
-      if (!hashCount[newLinkNode.hash]) {
-        hashCount[newLinkNode.hash] = 1;
-      } else {
-        hashCount[newLinkNode.hash] += 1;
-      }
-      if (!hashCount[beforeLinkNode.hash]) {
-        hashCount[beforeLinkNode.hash] = 1;
-      } else {
-        hashCount[beforeLinkNode.hash] += 1;
-      }
-      if (hashCount[newLinkNode.hash] == 2) {
-        break;
-      }
-      if (hashCount[beforeLinkNode.hash] == 2) {
-        break;
-      }
-      newLinkNode = await this.blockEntityRepository.findOne({
+      const afterBlock = await this.blockEntityRepository.findOne({
         where: {
-          hash: newLinkNode.previousblockhash,
+          previousblockhash: tempChainTipsBlock.hash,
         },
       });
-      beforeLinkNode = await this.blockEntityRepository.findOne({
-        where: {
-          hash: beforeLinkNode.previousblockhash,
-        },
-      });
-      newList.push(newLinkNode);
-      oldList.push(beforeLinkNode);
-    }
-    const reorgFromBlock = newList[newList.length - 1];
-    for (const oldItem of oldList) {
-      if (reorgFromBlock.hash == oldItem.hash) {
-        break;
+      if (afterBlock) {
+        reorgList.push(afterBlock);
       } else {
-        reorgList.push(oldItem);
+        break;
       }
+      tempChainTipsBlock = afterBlock;
     }
     return {
-      newList,
-      reorgList: reorgList.slice(0, reorgList.length - 1),
+      reorgList: reorgList,
     };
   }
 
@@ -686,6 +634,9 @@ export class BlockService implements OnApplicationBootstrap {
       this.blockEntityRepository.findOne({
         where: {
           is_chaintips: true,
+        },
+        order: {
+          cursor_id: 'desc',
         },
       }),
       this.blockEntityRepository.findOne({
@@ -742,13 +693,10 @@ export class BlockService implements OnApplicationBootstrap {
       }
     } else {
       this.logger.debug('have reorg');
-      const {
-        newList,
-        reorgList,
-      }: { newList: BlockEntity[]; reorgList: BlockEntity[] } =
+      const { reorgList }: { reorgList: BlockEntity[] } =
         await this.forwardReorg(dbRecord);
       const saveReorgList: BlockEntity[] = this.updateReorg(reorgList);
-      const saveNewList: BlockEntity[] = this.updateReorgChainTips(newList);
+      const saveNewList: BlockEntity[] = this.updateReorgChainTips(blockLinked);
       const reorgHashList = saveReorgList
         .map((value) => {
           return value.hash;
