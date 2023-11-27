@@ -64,6 +64,7 @@ export class TransactionService implements OnApplicationBootstrap {
     this.syncMemPoolDaemon().then();
     this.checkMemPoolDaemon().then();
     this.checkTxTimeoutDaemon().then();
+    this.useTxoDaemon().then();
   }
 
   rawTxFromZmq(rawTx: Buffer) {
@@ -562,7 +563,9 @@ export class TransactionService implements OnApplicationBootstrap {
     }
     const completedTxidList = Object.keys(completedTxidMap);
     if (completedTxidList.length > 0) {
-      this.logger.debug(`completedTxidList: ${completedTxidList}`);
+      this.logger.debug(
+        `completedTxidList: ${completedTxidList[0]} ${completedTxidList.length}`,
+      );
       await Promise.all([
         this.transactionEntityRepository.update(
           {
@@ -952,6 +955,61 @@ export class TransactionService implements OnApplicationBootstrap {
         console.log('checkTxTimeoutDaemon', e);
       }
       await sleep(10 * 1000);
+    }
+  }
+
+  async useTxo(lastCursorId: number) {
+    const beforeQ = new Date();
+    const bulkNumber = 10000;
+    const lastCursorIdEntity = await this.txInEntityRepository.findOne({
+      where: {
+        is_processed: false,
+        cursor_id: MoreThan(lastCursorId),
+      },
+      order: {
+        cursor_id: 'asc',
+      },
+    });
+    const afterQ = new Date();
+    let cursorId = lastCursorId;
+    if (lastCursorIdEntity) {
+      cursorId = lastCursorIdEntity.cursor_id;
+    }
+    const beforeU = new Date();
+    const updateResult: { changedRows: number; info: string } =
+      await this.txInEntityRepository.query(
+        `
+      UPDATE 
+        tx_in JOIN tx_out ON (tx_in.outpoint = tx_out.outpoint)
+      SET 
+        tx_in.is_processed = TRUE, tx_out.is_used = TRUE
+      WHERE
+        tx_in.cursor_id >= ? AND tx_in.cursor_id  < ? AND tx_in.is_processed = FALSE;
+    `,
+        [cursorId, cursorId + bulkNumber],
+      );
+    const afterU = new Date();
+    if (updateResult.changedRows > 0) {
+      this.logger.debug(
+        `timeQuery: ${afterQ.getTime() - beforeQ.getTime()}, timeUpdate: ${
+          afterU.getTime() - beforeU.getTime()
+        }, info: ${
+          updateResult.info
+        }, cursorId: ${cursorId}, lastCursorId: ${lastCursorId}`,
+      );
+    }
+    return cursorId;
+  }
+
+  async useTxoDaemon() {
+    let lastCursorId = 1;
+    while (true) {
+      try {
+        lastCursorId = await this.useTxo(lastCursorId);
+      } catch (e) {
+        console.log('useTxoDaemon', e);
+      }
+      await sleep(1000);
     }
   }
 }

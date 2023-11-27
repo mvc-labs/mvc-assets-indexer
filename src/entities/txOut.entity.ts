@@ -49,6 +49,10 @@ export class TxOutEntity {
   @Index()
   is_deleted: boolean;
 
+  @Column({ default: false })
+  @Index()
+  is_used: boolean;
+
   @CreateDateColumn()
   created_at: Date;
 

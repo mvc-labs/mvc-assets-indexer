@@ -27,6 +27,7 @@ export class AddressService {
       WHERE
           tx_out.address_hex = ?
           AND tx_in.outpoint is NULL
+          AND tx_out.is_used = false
           AND tx_out.is_deleted = false
           AND tx.block_hash IS NOT NULL
           AND tx_out.script_type = 2
@@ -44,6 +45,7 @@ export class AddressService {
       WHERE
           tx_out.address_hex = ?
           AND tx_in.outpoint is NULL
+          AND tx_out.is_used = false
           AND tx_out.is_deleted = false 
           AND tx.block_hash IS NULL
           AND tx_out.script_type = 2
@@ -100,6 +102,7 @@ export class AddressService {
             WHERE
                 tx_out.address_hex = ?
                 AND tx_in.outpoint is NULL
+                AND tx_out.is_used = false
                 AND tx_out.is_deleted = false  
                 AND tx_out.script_type = 2 
                 AND tx_out.cursor_id > ?

@@ -42,6 +42,7 @@ FROM
 WHERE
     address_hex = ?
     AND tx_in.outpoint is NULL
+    AND tx_out.is_used = false
     AND tx_out_ft.codeHash = ?
     AND tx_out_ft.genesis = ?
     AND tx_out.check_token = 1
@@ -82,6 +83,7 @@ FROM
 WHERE
     address_hex = ?
     AND tx_in.outpoint is NULL
+    AND tx_out.is_used = false
     AND tx_out.check_token = 1
 GROUP BY
     tx_out_ft.codeHash,
@@ -151,6 +153,7 @@ FROM
 WHERE
     address_hex = ?
     AND tx_in.outpoint is NULL
+    AND tx_out.is_used = false
     AND tx_out.cursor_id > ?
     AND tx_out.check_token = 1
     AND tx_out_ft.codeHash = ?
@@ -179,6 +182,7 @@ FROM
 WHERE
     address_hex = ?
     AND tx_in.outpoint is NULL
+    AND tx_out.is_used = false
     AND tx_out.cursor_id > ?
     AND tx_out.check_token = 1
     LIMIT 100;`;
