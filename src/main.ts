@@ -22,6 +22,7 @@ async function bootstrap() {
       'george@cyber3.space',
     )
     .addServer('https://mvcapi.cyber3.space')
+    .addServer('https://mvcapi-testnet.cyber3.space')
     .addTag('block')
     .addTag('tx')
     .addTag('address')

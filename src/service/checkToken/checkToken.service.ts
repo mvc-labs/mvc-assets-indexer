@@ -34,15 +34,25 @@ export class CheckTokenService {
   verifyFtToken(
     txOut: TxOutFtEntity,
     usedTxo: TxOutFtEntity[],
+    tokenHash: string,
+    tokenCodeHash: string,
     genesisHash: string,
     genesisCodeHash: string,
     genesisTxId: string,
+    sensibleId: string,
   ) {
     if (usedTxo && usedTxo.length > 0) {
       for (const txo of usedTxo) {
         if (
-          (txo.genesis == txOut.genesis && txo.codeHash == txOut.codeHash) ||
-          (txo.genesis == genesisHash && txo.codeHash == genesisCodeHash) ||
+          (txo.genesis == txOut.genesis &&
+            txo.codeHash == txOut.codeHash &&
+            txo.sensibleId == txOut.sensibleId) ||
+          (txo.genesis == tokenHash &&
+            txo.codeHash == tokenCodeHash &&
+            txo.sensibleId === sensibleId) ||
+          (txo.genesis == genesisHash &&
+            txo.codeHash == genesisCodeHash &&
+            txo.sensibleId === sensibleId) ||
           txo.txid == genesisTxId
         ) {
           return true;
@@ -133,8 +143,11 @@ export class CheckTokenService {
             outpoint: genesisOutpoint,
           },
         });
+        let tokenHash: string;
+        let tokenCodeHash: string;
         let genesisHash: string;
         let genesisCodeHash: string;
+        let sensibleId: string;
         if (useGenesis) {
           const useGenesisTxOutList = await this.txOutFtEntityRepository.find({
             where: {
@@ -142,19 +155,30 @@ export class CheckTokenService {
             },
           });
           for (const txOutFtEntity of useGenesisTxOutList) {
+            // token
             if (txOutFtEntity.codeHash === txOutFt.codeHash) {
+              tokenHash = txOutFtEntity.genesis;
+              tokenCodeHash = txOutFtEntity.codeHash;
+              sensibleId = txOutFtEntity.sensibleId;
+            }
+            // new genesis
+            if (txOutFtEntity.value === '0') {
               genesisHash = txOutFtEntity.genesis;
               genesisCodeHash = txOutFtEntity.codeHash;
+              sensibleId = txOutFtEntity.sensibleId;
             }
           }
         }
-        if (txOutFt && txOutGenesis && genesisHash && genesisCodeHash) {
+        if (txOutFt && txOutGenesis && tokenHash && tokenCodeHash) {
           const isVerify = this.verifyFtToken(
             txOutFt,
             usedTxOutFtMap[txOut.txid],
+            tokenHash,
+            tokenCodeHash,
             genesisHash,
             genesisCodeHash,
             genesisTxId,
+            sensibleId,
           );
           if (isVerify) {
             txOut.check_token = TxoCheckStatus.passed;
