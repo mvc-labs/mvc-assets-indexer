@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { ZmqService } from '../zmq/zmq.service';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, LessThan, MoreThan, Repository } from 'typeorm';
+import { IsNull, LessThan, MoreThan, MoreThanOrEqual, Repository } from "typeorm";
 import { TransactionEntity } from '../../entities/transaction.entity';
 import * as mvc from 'mvc-lib';
 import {
@@ -964,7 +964,7 @@ export class TransactionService implements OnApplicationBootstrap {
     const lastCursorIdEntity = await this.txInEntityRepository.findOne({
       where: {
         is_processed: false,
-        cursor_id: MoreThan(lastCursorId),
+        cursor_id: MoreThanOrEqual(lastCursorId),
       },
       order: {
         cursor_id: 'asc',
