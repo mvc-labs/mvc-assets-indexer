@@ -1,7 +1,13 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { ZmqService } from '../zmq/zmq.service';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, LessThan, MoreThan, MoreThanOrEqual, Repository } from "typeorm";
+import {
+  IsNull,
+  LessThan,
+  MoreThan,
+  MoreThanOrEqual,
+  Repository,
+} from 'typeorm';
 import { TransactionEntity } from '../../entities/transaction.entity';
 import * as mvc from 'mvc-lib';
 import {
@@ -65,6 +71,7 @@ export class TransactionService implements OnApplicationBootstrap {
     this.checkMemPoolDaemon().then();
     this.checkTxTimeoutDaemon().then();
     this.useTxoDaemon().then();
+    this.doubleCheckTxoDaemon().then();
   }
 
   rawTxFromZmq(rawTx: Buffer) {
@@ -1001,6 +1008,55 @@ export class TransactionService implements OnApplicationBootstrap {
     return cursorId;
   }
 
+  async doubleCheckTxo() {
+    {
+      const beforeU = new Date();
+      const txOutCheck: { changedRows: number; info: string } =
+        await this.txOutEntityRepository.query(
+          `
+      UPDATE 
+        tx_out JOIN tx_in ON (tx_in.outpoint = tx_out.outpoint)
+      SET 
+        tx_out.is_used = TRUE
+      WHERE
+          tx_in.is_processed = TRUE
+          AND tx_out.is_used = FALSE;
+    `,
+        );
+      const afterU = new Date();
+      if (txOutCheck.changedRows > 0) {
+        this.logger.debug(
+          `txOutCheck: timeUpdate: ${
+            afterU.getTime() - beforeU.getTime()
+          } info: ${txOutCheck.info}`,
+        );
+      }
+    }
+    {
+      const beforeU = new Date();
+      const txInCheck: { changedRows: number; info: string } =
+        await this.txInEntityRepository.query(
+          `
+      UPDATE 
+        tx_in JOIN tx_out ON (tx_in.outpoint = tx_out.outpoint)
+      SET 
+        tx_in.is_processed = TRUE
+      WHERE
+          tx_in.is_processed = FALSE
+          AND tx_out.is_used = TRUE;
+    `,
+        );
+      const afterU = new Date();
+      if (txInCheck.changedRows > 0) {
+        this.logger.debug(
+          `txOutCheck: timeUpdate: ${
+            afterU.getTime() - beforeU.getTime()
+          } info: ${txInCheck.info}`,
+        );
+      }
+    }
+  }
+
   async useTxoDaemon() {
     let lastCursorId = 1;
     while (true) {
@@ -1010,6 +1066,17 @@ export class TransactionService implements OnApplicationBootstrap {
         console.log('useTxoDaemon', e);
       }
       await sleep(1000);
+    }
+  }
+
+  async doubleCheckTxoDaemon() {
+    while (true) {
+      try {
+        await this.doubleCheckTxo();
+      } catch (e) {
+        console.log('doubleCheckTxoDaemon', e);
+      }
+      await sleep(20000);
     }
   }
 }
