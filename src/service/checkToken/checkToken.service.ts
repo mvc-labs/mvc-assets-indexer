@@ -169,7 +169,14 @@ export class CheckTokenService {
             }
           }
         }
-        if (txOutFt && txOutGenesis && tokenHash && tokenCodeHash) {
+        if (
+          usedTxOutFtMap[txOut.txid] &&
+          usedTxOutFtMap[txOut.txid].length > 0 &&
+          txOutFt &&
+          txOutGenesis &&
+          tokenHash &&
+          tokenCodeHash
+        ) {
           const isVerify = this.verifyFtToken(
             txOutFt,
             usedTxOutFtMap[txOut.txid],
