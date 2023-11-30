@@ -86,6 +86,7 @@ export class CheckTokenService {
     const txidList = Object.keys(txidMap).sort();
     const txInUseOutpointMap = {};
     const txInUseOutpointList = [];
+    const txInAmountMap = {};
     await PromisePool.withConcurrency(10)
       .for(txidList)
       .process(async (txid) => {
@@ -98,6 +99,15 @@ export class CheckTokenService {
           txInUseOutpointMap[value.outpoint] = value.txid;
           txInUseOutpointList.push(value.outpoint);
         });
+        if (!txInAmountMap[txid]) {
+          const tx = await this.transactionEntityRepository.findOne({
+            where: {
+              txid: txid,
+            },
+          });
+          txInAmountMap[txid] =
+            Number(tx.tx_in_num) - Number(tx.tx_in_coinbase);
+        }
       });
     const usedTxOutFtList = [];
     await PromisePool.withConcurrency(10)
@@ -110,6 +120,16 @@ export class CheckTokenService {
         });
         if (txOutFt) {
           usedTxOutFtList.push(txOutFt);
+        } else {
+          const txOutPrev = await this.txOutEntityRepository.findOne({
+            where: {
+              outpoint: outpoint,
+            },
+            select: ['outpoint'],
+          });
+          if (txOutPrev) {
+            usedTxOutFtList.push({});
+          }
         }
       });
     const usedTxOutFtMap = {};
@@ -171,7 +191,7 @@ export class CheckTokenService {
         }
         if (
           usedTxOutFtMap[txOut.txid] &&
-          usedTxOutFtMap[txOut.txid].length > 0 &&
+          usedTxOutFtMap[txOut.txid].length === txInAmountMap[txOut.txid] &&
           txOutFt &&
           txOutGenesis &&
           tokenHash &&
