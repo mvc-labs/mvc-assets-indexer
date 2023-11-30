@@ -36,12 +36,10 @@ SELECT
     CONCAT(SUM(tx_out_ft.value), '') AS balance
 FROM
     tx_out
-    LEFT JOIN tx_in ON tx_out.outpoint = tx_in.outpoint
     JOIN tx_out_ft ON tx_out.outpoint = tx_out_ft.outpoint
     JOIN tx on tx.txid = tx_out.txid
 WHERE
     address_hex = ?
-    AND tx_in.outpoint is NULL
     AND tx_out.is_used = false
     AND tx_out_ft.codeHash = ?
     AND tx_out_ft.genesis = ?
@@ -77,12 +75,10 @@ SELECT
     CONCAT(SUM(tx_out_ft.value), '') AS balance
 FROM
     tx_out
-    LEFT JOIN tx_in ON tx_out.outpoint = tx_in.outpoint
     JOIN tx_out_ft ON tx_out.outpoint = tx_out_ft.outpoint
     JOIN tx on tx.txid = tx_out.txid
 WHERE
     address_hex = ?
-    AND tx_in.outpoint is NULL
     AND tx_out.is_used = false
     AND tx_out.check_token = 1
 GROUP BY
@@ -146,13 +142,11 @@ GROUP BY
     tx_out.outpoint as flag
 FROM
     tx_out
-    LEFT JOIN tx_in ON tx_out.outpoint = tx_in.outpoint
     JOIN tx_out_ft ON tx_out.outpoint = tx_out_ft.outpoint
     JOIN tx on tx.txid = tx_out.txid
     LEFT JOIN block on tx.block_hash = block.hash
 WHERE
     address_hex = ?
-    AND tx_in.outpoint is NULL
     AND tx_out.is_used = false
     AND tx_out.cursor_id > ?
     AND tx_out.check_token = 1
@@ -175,13 +169,11 @@ WHERE
     tx_out.outpoint as flag
 FROM
     tx_out
-    LEFT JOIN tx_in ON tx_out.outpoint = tx_in.outpoint
     JOIN tx_out_ft ON tx_out.outpoint = tx_out_ft.outpoint
     JOIN tx ON tx.txid = tx_out.txid
     LEFT JOIN block on tx.block_hash = block.hash
 WHERE
     address_hex = ?
-    AND tx_in.outpoint is NULL
     AND tx_out.is_used = false
     AND tx_out.cursor_id > ?
     AND tx_out.check_token = 1

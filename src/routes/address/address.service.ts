@@ -22,11 +22,9 @@ export class AddressService {
           sum(tx_out.satoshis) as balance, count(*) as ct
       FROM 
           tx_out 
-          LEFT JOIN tx_in ON tx_out.outpoint = tx_in.outpoint
           JOIN tx on tx.txid = tx_out.txid
       WHERE
           tx_out.address_hex = ?
-          AND tx_in.outpoint is NULL
           AND tx_out.is_used = false
           AND tx_out.is_deleted = false
           AND tx.block_hash IS NOT NULL
@@ -40,11 +38,9 @@ export class AddressService {
           sum(tx_out.satoshis) as balance, count(*) as ct
       FROM 
           tx_out
-          LEFT JOIN tx_in ON tx_out.outpoint = tx_in.outpoint
           JOIN tx on tx.txid = tx_out.txid
       WHERE
           tx_out.address_hex = ?
-          AND tx_in.outpoint is NULL
           AND tx_out.is_used = false
           AND tx_out.is_deleted = false 
           AND tx.block_hash IS NULL
@@ -96,12 +92,10 @@ export class AddressService {
                 block.height as height
             FROM
                 tx_out
-                LEFT JOIN tx_in ON tx_out.outpoint = tx_in.outpoint
                 JOIN tx ON tx_out.txid = tx.txid
                 LEFT JOIN block ON tx.block_hash = block.hash
             WHERE
                 tx_out.address_hex = ?
-                AND tx_in.outpoint is NULL
                 AND tx_out.is_used = false
                 AND tx_out.is_deleted = false  
                 AND tx_out.script_type = 2 
