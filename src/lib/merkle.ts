@@ -5,6 +5,11 @@ const genesisMerkleRoot = Buffer.from(
   'hex',
 ).reverse();
 
+const genesisTrueMerkleRoot = Buffer.from(
+  '921c9ad4264610101e46b4e67b7c030fbcc4ca9633bbd40b3079a62cf3ef531d',
+  'hex',
+).reverse();
+
 const _hashMerkleNode = function (a: Buffer, b: Buffer) {
   return mvc.crypto.Hash.sha256(
     mvc.crypto.Hash.sha256(Buffer.concat([a, b] as any)),
@@ -45,10 +50,11 @@ export const verifyMerkle = function (block: any) {
       return value.hash;
     });
     const fileMerkleRoot = merkle(txIdList);
-    return !(
-      !genesisMerkleRoot.equals(block.header.merkleRoot) &&
-      !fileMerkleRoot.equals(fileMerkleRoot)
-    );
+    if (genesisMerkleRoot.equals(block.header.merkleRoot)) {
+      return fileMerkleRoot.equals(genesisTrueMerkleRoot);
+    } else {
+      return fileMerkleRoot.equals(block.header.merkleRoot);
+    }
   } catch (e) {}
   return false;
 };
