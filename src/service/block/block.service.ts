@@ -300,6 +300,8 @@ export class BlockService implements OnApplicationBootstrap {
     }
     const _hasTxIdList: {
       TransactionEntity_txid: string;
+      TransactionEntity_block_hash: string;
+      TransactionEntity_is_completed_check: boolean;
       TransactionEntity_tx_in_num: number;
       TransactionEntity_tx_in_coinbase: number;
       TransactionEntity_tx_out_num: number;
@@ -317,6 +319,8 @@ export class BlockService implements OnApplicationBootstrap {
           .createQueryBuilder('TransactionEntity')
           .select([
             'TransactionEntity.txid',
+            'TransactionEntity.block_hash',
+            'TransactionEntity.is_completed_check',
             'TransactionEntity.tx_in_num',
             'TransactionEntity.tx_in_coinbase',
             'TransactionEntity.tx_out_num',
@@ -349,7 +353,8 @@ export class BlockService implements OnApplicationBootstrap {
           value.TransactionEntity_tx_out_0_satoshi;
         if (
           dbCountStatus.tx_in_num == value_tx_in_num &&
-          dbCountStatus.tx_out_num == value_tx_out_num
+          dbCountStatus.tx_out_num == value_tx_out_num &&
+          value.TransactionEntity_block_hash == nostartRow.hash
         ) {
           existTxIdMap[value.TransactionEntity_txid] = true;
           hasTxIdList.push(value.TransactionEntity_txid);

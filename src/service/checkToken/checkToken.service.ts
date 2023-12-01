@@ -128,7 +128,7 @@ export class CheckTokenService {
             select: ['outpoint'],
           });
           if (txOutPrev) {
-            usedTxOutFtList.push({});
+            usedTxOutFtList.push(txOutPrev);
           }
         }
       });
