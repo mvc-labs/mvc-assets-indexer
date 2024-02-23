@@ -64,6 +64,7 @@ export class CheckTokenService {
 
   async checkFt(limit: number) {
     const txOuts = await this.txOutEntityRepository.find({
+      select: ['outpoint', 'txid'],
       where: {
         script_type: OutputType.SENSIBLE_FT,
         check_token: TxoCheckStatus.uncheck,

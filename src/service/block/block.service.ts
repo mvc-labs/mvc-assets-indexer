@@ -261,7 +261,7 @@ export class BlockService implements OnApplicationBootstrap {
       return value.hash;
     });
     {
-      const step = 1000;
+      const step = 300;
       for (let i = 0; i < txIdList.length; i += step) {
         const start = i;
         const end = i + step;

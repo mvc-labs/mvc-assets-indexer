@@ -15,6 +15,7 @@ export enum TxoCheckStatus {
 }
 
 @Entity('tx_out')
+@Index(['script_type', 'check_token'])
 export class TxOutEntity {
   @PrimaryColumn({ length: 80, unique: true })
   outpoint: string;
@@ -31,7 +32,6 @@ export class TxOutEntity {
   outputIndex: number;
 
   @Column()
-  @Index()
   script_type: OutputType;
 
   @Column({ default: TxoCheckStatus.uncheck })

@@ -71,7 +71,6 @@ export class TransactionService implements OnApplicationBootstrap {
     this.checkMemPoolDaemon().then();
     this.checkTxTimeoutDaemon().then();
     this.useTxoDaemon().then();
-    this.doubleCheckTxoDaemon().then();
   }
 
   rawTxFromZmq(rawTx: Buffer) {
@@ -241,9 +240,16 @@ export class TransactionService implements OnApplicationBootstrap {
         const { errors } = await PromisePool.withConcurrency(2)
           .for(txInEntityListSubSet)
           .process(async (txInEntityListSub) => {
-            await this.txInEntityRepository.upsert(txInEntityListSub, [
-              'outpoint',
-            ]);
+            await this.txInEntityRepository
+              .createQueryBuilder()
+              .insert()
+              .into(TxInEntity)
+              .values(txInEntityListSub)
+              .orIgnore()
+              .execute();
+            // await this.txInEntityRepository.upsert(txInEntityListSub, [
+            //   'outpoint',
+            // ]);
           });
         if (errors.length > 0) {
           console.log('mempool txIn save', errors);
@@ -254,7 +260,14 @@ export class TransactionService implements OnApplicationBootstrap {
         await PromisePool.withConcurrency(2)
           .for(txOutEntityListSubSet)
           .process(async (txOutEntityListSub) => {
-            await this.txOutEntityRepository.save(txOutEntityListSub);
+            await this.txOutEntityRepository
+              .createQueryBuilder()
+              .insert()
+              .into(TxOutEntity)
+              .values(txOutEntityListSub)
+              .orIgnore()
+              .execute();
+            // await this.txOutEntityRepository.save(txOutEntityListSub);
           });
       })(),
     ]);
@@ -468,9 +481,6 @@ export class TransactionService implements OnApplicationBootstrap {
   async checkMemPool() {
     // any time can run
     const step = 200;
-    let cursorId = 0;
-    const noCompletedTxidMap = {};
-    const completedTxidMap = {};
     while (true) {
       // logic body
       const records = await this.transactionEntityRepository.find({
@@ -478,14 +488,12 @@ export class TransactionService implements OnApplicationBootstrap {
           block_hash: IsNull(),
           is_deleted: false,
           is_completed_check: false,
-          cursor_id: MoreThan(cursorId),
         },
         take: step,
-        order: {
-          cursor_id: 'asc',
-        },
       });
       if (records.length > 0) {
+        const noCompletedTxidMap = {};
+        const completedTxidMap = {};
         const recordsTxid = records.map((record) => {
           return record.txid;
         });
@@ -539,48 +547,51 @@ export class TransactionService implements OnApplicationBootstrap {
             completedTxidMap[record.txid] = true;
           }
         }
-        cursorId = records[records.length - 1].cursor_id;
+        const noCompletedTxidList = Object.keys(noCompletedTxidMap);
+        if (noCompletedTxidList.length > 0) {
+          this.logger.debug(`noCompletedTxidList: ${noCompletedTxidList}`);
+          const step = 300;
+          for (let i = 0; i < noCompletedTxidList.length; i += step) {
+            const sub = noCompletedTxidList.slice(i, i + step);
+            await Promise.all([
+              this.transactionEntityRepository.update(
+                {
+                  txid: In(sub.sort()),
+                },
+                { is_deleted: true },
+              ),
+              this.txOutEntityRepository.update(
+                {
+                  txid: In(sub.sort()),
+                },
+                { is_deleted: true },
+              ),
+              this.txInEntityRepository.update(
+                {
+                  txid: In(sub.sort()),
+                },
+                { is_deleted: true },
+              ),
+            ]);
+          }
+        }
+        const completedTxidList = Object.keys(completedTxidMap);
+        if (completedTxidList.length > 0) {
+          this.logger.debug(
+            `completedTxidList: ${completedTxidList[0]} ${completedTxidList.length}`,
+          );
+          await Promise.all([
+            this.transactionEntityRepository.update(
+              {
+                txid: In(completedTxidList.sort()),
+              },
+              { is_completed_check: true },
+            ),
+          ]);
+        }
       } else {
         break;
       }
-    }
-    const noCompletedTxidList = Object.keys(noCompletedTxidMap);
-    if (noCompletedTxidList.length > 0) {
-      this.logger.debug(`noCompletedTxidList: ${noCompletedTxidList}`);
-      await Promise.all([
-        this.transactionEntityRepository.update(
-          {
-            txid: In(noCompletedTxidList.sort()),
-          },
-          { is_deleted: true },
-        ),
-        this.txOutEntityRepository.update(
-          {
-            txid: In(noCompletedTxidList.sort()),
-          },
-          { is_deleted: true },
-        ),
-        this.txInEntityRepository.update(
-          {
-            txid: In(noCompletedTxidList.sort()),
-          },
-          { is_deleted: true },
-        ),
-      ]);
-    }
-    const completedTxidList = Object.keys(completedTxidMap);
-    if (completedTxidList.length > 0) {
-      this.logger.debug(
-        `completedTxidList: ${completedTxidList[0]} ${completedTxidList.length}`,
-      );
-      await Promise.all([
-        this.transactionEntityRepository.update(
-          {
-            txid: In(completedTxidList.sort()),
-          },
-          { is_completed_check: true },
-        ),
-      ]);
     }
   }
 
@@ -590,15 +601,12 @@ export class TransactionService implements OnApplicationBootstrap {
     const timeout = new Date(now.getTime() - timeOutMs);
     // any time can run
     const step = 200;
-    let cursorId = 0;
-    const timeOutTxidList = [];
     while (true) {
       // logic body
       const records = await this.transactionEntityRepository.find({
         where: {
           block_hash: IsNull(),
           is_deleted: false,
-          cursor_id: MoreThan(cursorId),
           created_at: LessThan(timeout),
         },
         take: step,
@@ -607,37 +615,35 @@ export class TransactionService implements OnApplicationBootstrap {
         },
       });
       if (records.length > 0) {
+        const timeOutTxidList = [];
         for (const record of records) {
           timeOutTxidList.push(record.txid);
           this.logger.debug(`${record.txid} ${record.created_at}`);
         }
-        cursorId = records[records.length - 1].cursor_id;
+        this.logger.debug(`timeOutTxidList: ${timeout} ${timeOutTxidList}`);
+        await Promise.all([
+          this.transactionEntityRepository.update(
+            {
+              txid: In(timeOutTxidList.sort()),
+            },
+            { is_deleted: true },
+          ),
+          this.txOutEntityRepository.update(
+            {
+              txid: In(timeOutTxidList.sort()),
+            },
+            { is_deleted: true },
+          ),
+          this.txInEntityRepository.update(
+            {
+              txid: In(timeOutTxidList.sort()),
+            },
+            { is_deleted: true },
+          ),
+        ]);
       } else {
         break;
       }
-    }
-    if (timeOutTxidList.length > 0) {
-      this.logger.debug(`timeOutTxidList: ${timeout} ${timeOutTxidList}`);
-      await Promise.all([
-        this.transactionEntityRepository.update(
-          {
-            txid: In(timeOutTxidList.sort()),
-          },
-          { is_deleted: true },
-        ),
-        this.txOutEntityRepository.update(
-          {
-            txid: In(timeOutTxidList.sort()),
-          },
-          { is_deleted: true },
-        ),
-        this.txInEntityRepository.update(
-          {
-            txid: In(timeOutTxidList.sort()),
-          },
-          { is_deleted: true },
-        ),
-      ]);
     }
   }
 
@@ -724,9 +730,9 @@ export class TransactionService implements OnApplicationBootstrap {
               clearBlockDataCacheList.push(saveInfo.clearBlockDataCache);
               txList.push(saveInfo.tx);
             }
-            if (txInEntityList.length > 1000) {
+            const bulkNumber = 150;
+            if (txInEntityList.length > bulkNumber) {
               const concurrency = 5;
-              const bulkNumber = 1000;
               const p1 = PromisePool.withConcurrency(concurrency)
                 .for(arrayToChunks(transactionEntityList, bulkNumber))
                 .process(async (chunk) => {
@@ -738,34 +744,62 @@ export class TransactionService implements OnApplicationBootstrap {
               const p2 = PromisePool.withConcurrency(concurrency)
                 .for(arrayToChunks(txInEntityList, bulkNumber))
                 .process(async (chunk) => {
-                  await this.txInEntityRepository.upsert(
-                    sortedObjectArrayByKey(chunk, 'outpoint'),
-                    ['outpoint'],
-                  );
+                  await this.txInEntityRepository
+                    .createQueryBuilder()
+                    .insert()
+                    .into(TxInEntity)
+                    .values(chunk)
+                    .orIgnore()
+                    .execute();
+                  // await this.txInEntityRepository.upsert(
+                  //   sortedObjectArrayByKey(chunk, 'outpoint'),
+                  //   ['outpoint'],
+                  // );
                 });
               const p3 = PromisePool.withConcurrency(concurrency)
                 .for(arrayToChunks(txOutEntityList, bulkNumber))
                 .process(async (chunk) => {
-                  await this.txOutEntityRepository.upsert(
-                    sortedObjectArrayByKey(chunk, 'outpoint'),
-                    ['outpoint'],
-                  );
+                  await this.txOutEntityRepository
+                    .createQueryBuilder()
+                    .insert()
+                    .into(TxOutEntity)
+                    .values(chunk)
+                    .orIgnore()
+                    .execute();
+                  // await this.txOutEntityRepository.upsert(
+                  //   sortedObjectArrayByKey(chunk, 'outpoint'),
+                  //   ['outpoint'],
+                  // );
                 });
               const p4 = PromisePool.withConcurrency(concurrency)
                 .for(arrayToChunks(txOutNftEntityList, bulkNumber))
                 .process(async (chunk) => {
-                  await this.txOutNftEntityRepository.upsert(
-                    sortedObjectArrayByKey(chunk, 'outpoint'),
-                    ['outpoint'],
-                  );
+                  await this.txInEntityRepository
+                    .createQueryBuilder()
+                    .insert()
+                    .into(TxInEntity)
+                    .values(chunk)
+                    .orIgnore()
+                    .execute();
+                  // await this.txOutNftEntityRepository.upsert(
+                  //   sortedObjectArrayByKey(chunk, 'outpoint'),
+                  //   ['outpoint'],
+                  // );
                 });
               const p5 = PromisePool.withConcurrency(concurrency)
                 .for(arrayToChunks(txOutFtEntityList, bulkNumber))
                 .process(async (chunk) => {
-                  await this.txOutFtEntityRepository.upsert(
-                    sortedObjectArrayByKey(chunk, 'outpoint'),
-                    ['outpoint'],
-                  );
+                  await this.txOutEntityRepository
+                    .createQueryBuilder()
+                    .insert()
+                    .into(TxOutEntity)
+                    .values(chunk)
+                    .orIgnore()
+                    .execute();
+                  // await this.txOutFtEntityRepository.upsert(
+                  //   sortedObjectArrayByKey(chunk, 'outpoint'),
+                  //   ['outpoint'],
+                  // );
                 });
               const pResultList = await Promise.all([p1, p2, p3, p4, p5]);
               let errorsLength = 0;
@@ -961,27 +995,26 @@ export class TransactionService implements OnApplicationBootstrap {
       } catch (e) {
         console.log('checkTxTimeoutDaemon', e);
       }
-      await sleep(10 * 1000);
+      await sleep(60 * 60 * 1000);
     }
   }
 
-  async useTxo(lastCursorId: number) {
+  async useTxo() {
     const beforeQ = new Date();
-    const bulkNumber = 10000;
+    const bulkNumber = 2000;
     const lastCursorIdEntity = await this.txInEntityRepository.findOne({
       where: {
         is_processed: false,
-        cursor_id: MoreThanOrEqual(lastCursorId),
       },
       order: {
         cursor_id: 'asc',
       },
     });
-    const afterQ = new Date();
-    let cursorId = lastCursorId;
-    if (lastCursorIdEntity) {
-      cursorId = lastCursorIdEntity.cursor_id;
+    if (!lastCursorIdEntity) {
+      return;
     }
+    const afterQ = new Date();
+    const cursorId = lastCursorIdEntity.cursor_id;
     const beforeU = new Date();
     const updateResult: { changedRows: number; info: string } =
       await this.txInEntityRepository.query(
@@ -1002,81 +1035,20 @@ export class TransactionService implements OnApplicationBootstrap {
           afterU.getTime() - beforeU.getTime()
         }, info: ${
           updateResult.info
-        }, cursorId: ${cursorId}, lastCursorId: ${lastCursorId}`,
+        }, cursorId: ${cursorId}, lastCursorId: ${cursorId}`,
       );
     }
     return cursorId;
   }
 
-  async doubleCheckTxo() {
-    {
-      const beforeU = new Date();
-      const txOutCheck: { changedRows: number; info: string } =
-        await this.txOutEntityRepository.query(
-          `
-      UPDATE 
-        tx_out JOIN tx_in ON (tx_in.outpoint = tx_out.outpoint)
-      SET 
-        tx_out.is_used = TRUE
-      WHERE
-          tx_in.is_processed = TRUE
-          AND tx_out.is_used = FALSE;
-    `,
-        );
-      const afterU = new Date();
-      if (txOutCheck.changedRows > 0) {
-        this.logger.debug(
-          `txOutCheck: timeUpdate: ${
-            afterU.getTime() - beforeU.getTime()
-          } info: ${txOutCheck.info}`,
-        );
-      }
-    }
-    {
-      const beforeU = new Date();
-      const txInCheck: { changedRows: number; info: string } =
-        await this.txInEntityRepository.query(
-          `
-      UPDATE 
-        tx_in JOIN tx_out ON (tx_in.outpoint = tx_out.outpoint)
-      SET 
-        tx_in.is_processed = TRUE
-      WHERE
-          tx_in.is_processed = FALSE
-          AND tx_out.is_used = TRUE;
-    `,
-        );
-      const afterU = new Date();
-      if (txInCheck.changedRows > 0) {
-        this.logger.debug(
-          `txOutCheck: timeUpdate: ${
-            afterU.getTime() - beforeU.getTime()
-          } info: ${txInCheck.info}`,
-        );
-      }
-    }
-  }
-
   async useTxoDaemon() {
-    let lastCursorId = 1;
     while (true) {
       try {
-        lastCursorId = await this.useTxo(lastCursorId);
+        await this.useTxo();
       } catch (e) {
         console.log('useTxoDaemon', e);
       }
       await sleep(1000);
-    }
-  }
-
-  async doubleCheckTxoDaemon() {
-    while (true) {
-      try {
-        await this.doubleCheckTxo();
-      } catch (e) {
-        console.log('doubleCheckTxoDaemon', e);
-      }
-      await sleep(20000);
     }
   }
 }

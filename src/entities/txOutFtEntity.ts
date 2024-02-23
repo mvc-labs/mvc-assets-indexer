@@ -6,6 +6,7 @@ export class TxOutFtEntity {
   outpoint: string;
 
   @Column({ length: 64 })
+  @Index()
   txid: string;
 
   @Column({ length: 40 })
