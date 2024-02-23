@@ -238,10 +238,12 @@ export class CheckTokenService {
       try {
         const { txOuts, saveTxOuts } = await this.checkFt(limit);
         if (txOuts < limit) {
+          // have token record, but have record not check pass
           await sleep(3000);
         }
         if (txOuts === limit && saveTxOuts == 0) {
-          await sleep(3000);
+          // have token record, but no one check pass
+          await sleep(60000);
         }
       } catch (e) {
         console.log('checkFtDaemon e', e);

@@ -78,7 +78,7 @@ export class BlockService implements OnApplicationBootstrap {
         processStatus: BlockProcessStatus.downloaded,
       },
       order: {
-        cursor_id: 'asc',
+        height: 'asc',
       },
       take: 100,
     });
@@ -87,18 +87,18 @@ export class BlockService implements OnApplicationBootstrap {
         processStatus: BlockProcessStatus.completed,
       },
       order: {
-        cursor_id: 'desc',
+        height: 'desc',
       },
     });
     if (maxCompletedRow) {
       // before process
       const beforeProcess = await this.blockEntityRepository.find({
         where: {
-          cursor_id: LessThan(maxCompletedRow.cursor_id),
+          height: LessThan(maxCompletedRow.height),
           processStatus: BlockProcessStatus.processing,
         },
         order: {
-          cursor_id: 'asc',
+          height: 'asc',
         },
         take: 100,
       });
@@ -781,16 +781,7 @@ export class BlockService implements OnApplicationBootstrap {
     }
   }
 
-  private async doubleCheckBlock() {
-    const completedBlock = await this.blockEntityRepository.findOne({
-      where: {
-        processStatus: BlockProcessStatus.completed,
-        is_reorg: false,
-      },
-      order: {
-        cursor_id: 'asc',
-      },
-    });
+  private async doubleCheckOneBlock(completedBlock: BlockEntity) {
     if (completedBlock) {
       const records: any[] = await this.transactionEntityRepository
         .createQueryBuilder('tx')
@@ -836,13 +827,39 @@ export class BlockService implements OnApplicationBootstrap {
     }
   }
 
+  private async doubleCheckBlock() {
+    const completedBlockList = await this.blockEntityRepository.find({
+      where: {
+        processStatus: BlockProcessStatus.completed,
+        is_reorg: false,
+      },
+      order: {
+        height: 'asc',
+      },
+      take: 100,
+    });
+    let falseCount = 0;
+    for (const completedBlock of completedBlockList) {
+      const ct = await this.doubleCheckOneBlock(completedBlock);
+      if (ct) {
+        falseCount += 1;
+      }
+    }
+    return falseCount;
+  }
+
   private async daemonDoubleCheckBlock() {
     while (true) {
       try {
-        const ct = await this.doubleCheckBlock();
-        if (!ct) {
-          await sleep(1000);
+        const nostartCount = await this.blockEntityRepository.count({
+          where: {
+            processStatus: BlockProcessStatus.nostart,
+          },
+        });
+        if (nostartCount < 5) {
+          await this.doubleCheckBlock();
         }
+        await sleep(60 * 1000);
       } catch (e) {
         console.log('daemonDoubleCheckBlock error', e);
       }

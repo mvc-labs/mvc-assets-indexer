@@ -109,7 +109,7 @@ export class TransactionService implements OnApplicationBootstrap {
     } catch (e) {
       console.log('getRawTxByRest', e);
     }
-    this.logger.debug(`hashTxFromZmq ${txid}`);
+    // this.logger.debug(`hashTxFromZmq ${txid}`);
   }
 
   isFull() {
