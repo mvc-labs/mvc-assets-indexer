@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 
 @Entity('tx_in')
+@Index(['is_processed', 'cursor_id'])
 export class TxInEntity {
   @Column({ length: 64 })
   @Index()
@@ -24,7 +25,6 @@ export class TxInEntity {
   cursor_id: number;
 
   @Column({ default: false })
-  @Index()
   is_processed: boolean;
 
   @Column({ default: false })
