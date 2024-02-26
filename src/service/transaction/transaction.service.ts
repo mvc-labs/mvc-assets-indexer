@@ -240,16 +240,9 @@ export class TransactionService implements OnApplicationBootstrap {
         const { errors } = await PromisePool.withConcurrency(2)
           .for(txInEntityListSubSet)
           .process(async (txInEntityListSub) => {
-            await this.txInEntityRepository
-              .createQueryBuilder()
-              .insert()
-              .into(TxInEntity)
-              .values(txInEntityListSub)
-              .orIgnore()
-              .execute();
-            // await this.txInEntityRepository.upsert(txInEntityListSub, [
-            //   'outpoint',
-            // ]);
+            await this.txInEntityRepository.upsert(txInEntityListSub, [
+              'outpoint',
+            ]);
           });
         if (errors.length > 0) {
           console.log('mempool txIn save', errors);
@@ -260,14 +253,7 @@ export class TransactionService implements OnApplicationBootstrap {
         await PromisePool.withConcurrency(2)
           .for(txOutEntityListSubSet)
           .process(async (txOutEntityListSub) => {
-            await this.txOutEntityRepository
-              .createQueryBuilder()
-              .insert()
-              .into(TxOutEntity)
-              .values(txOutEntityListSub)
-              .orIgnore()
-              .execute();
-            // await this.txOutEntityRepository.save(txOutEntityListSub);
+            await this.txOutEntityRepository.save(txOutEntityListSub);
           });
       })(),
     ]);
@@ -610,9 +596,6 @@ export class TransactionService implements OnApplicationBootstrap {
           created_at: LessThan(timeout),
         },
         take: step,
-        order: {
-          cursor_id: 'asc',
-        },
       });
       if (records.length > 0) {
         const timeOutTxidList = [];
@@ -744,62 +727,34 @@ export class TransactionService implements OnApplicationBootstrap {
               const p2 = PromisePool.withConcurrency(concurrency)
                 .for(arrayToChunks(txInEntityList, bulkNumber))
                 .process(async (chunk) => {
-                  await this.txInEntityRepository
-                    .createQueryBuilder()
-                    .insert()
-                    .into(TxInEntity)
-                    .values(chunk)
-                    .orIgnore()
-                    .execute();
-                  // await this.txInEntityRepository.upsert(
-                  //   sortedObjectArrayByKey(chunk, 'outpoint'),
-                  //   ['outpoint'],
-                  // );
+                  await this.txInEntityRepository.upsert(
+                    sortedObjectArrayByKey(chunk, 'outpoint'),
+                    ['outpoint'],
+                  );
                 });
               const p3 = PromisePool.withConcurrency(concurrency)
                 .for(arrayToChunks(txOutEntityList, bulkNumber))
                 .process(async (chunk) => {
-                  await this.txOutEntityRepository
-                    .createQueryBuilder()
-                    .insert()
-                    .into(TxOutEntity)
-                    .values(chunk)
-                    .orIgnore()
-                    .execute();
-                  // await this.txOutEntityRepository.upsert(
-                  //   sortedObjectArrayByKey(chunk, 'outpoint'),
-                  //   ['outpoint'],
-                  // );
+                  await this.txOutEntityRepository.upsert(
+                    sortedObjectArrayByKey(chunk, 'outpoint'),
+                    ['outpoint'],
+                  );
                 });
               const p4 = PromisePool.withConcurrency(concurrency)
                 .for(arrayToChunks(txOutNftEntityList, bulkNumber))
                 .process(async (chunk) => {
-                  await this.txInEntityRepository
-                    .createQueryBuilder()
-                    .insert()
-                    .into(TxInEntity)
-                    .values(chunk)
-                    .orIgnore()
-                    .execute();
-                  // await this.txOutNftEntityRepository.upsert(
-                  //   sortedObjectArrayByKey(chunk, 'outpoint'),
-                  //   ['outpoint'],
-                  // );
+                  await this.txOutNftEntityRepository.upsert(
+                    sortedObjectArrayByKey(chunk, 'outpoint'),
+                    ['outpoint'],
+                  );
                 });
               const p5 = PromisePool.withConcurrency(concurrency)
                 .for(arrayToChunks(txOutFtEntityList, bulkNumber))
                 .process(async (chunk) => {
-                  await this.txOutEntityRepository
-                    .createQueryBuilder()
-                    .insert()
-                    .into(TxOutEntity)
-                    .values(chunk)
-                    .orIgnore()
-                    .execute();
-                  // await this.txOutFtEntityRepository.upsert(
-                  //   sortedObjectArrayByKey(chunk, 'outpoint'),
-                  //   ['outpoint'],
-                  // );
+                  await this.txOutFtEntityRepository.upsert(
+                    sortedObjectArrayByKey(chunk, 'outpoint'),
+                    ['outpoint'],
+                  );
                 });
               const pResultList = await Promise.all([p1, p2, p3, p4, p5]);
               let errorsLength = 0;
@@ -1038,13 +993,16 @@ export class TransactionService implements OnApplicationBootstrap {
         }, cursorId: ${cursorId}, lastCursorId: ${cursorId}`,
       );
     }
-    return cursorId;
+    return updateResult.changedRows;
   }
 
   async useTxoDaemon() {
     while (true) {
       try {
-        await this.useTxo();
+        const changeRow = await this.useTxo();
+        if (changeRow > 0) {
+          continue;
+        }
       } catch (e) {
         console.log('useTxoDaemon', e);
       }

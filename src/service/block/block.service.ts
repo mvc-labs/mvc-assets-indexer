@@ -21,6 +21,7 @@ import { PromisePool } from '@supercharge/promise-pool';
 import { TxInEntity } from '../../entities/txIn.entity';
 import { TxOutEntity } from '../../entities/txOut.entity';
 import { verifyMerkle } from '../../lib/merkle';
+import { Interval } from '@nestjs/schedule';
 
 @Injectable()
 export class BlockService implements OnApplicationBootstrap {
@@ -72,7 +73,27 @@ export class BlockService implements OnApplicationBootstrap {
     this.logger.debug(`newBlock: ${message.toString('hex')}`);
   }
 
+  @Interval(10 * 60 * 1000)
+  async progressSyncInfo() {
+    const totalBlock = await this.blockEntityRepository.count({
+      where: {
+        is_reorg: false,
+      },
+    });
+    const doubleCheckBlock = await this.blockEntityRepository.count({
+      where: {
+        processStatus: BlockProcessStatus.doubleCheck,
+        is_reorg: false,
+      },
+    });
+    const percent = ((doubleCheckBlock / totalBlock) * 100).toFixed(2);
+    const needSyncBlock = totalBlock - doubleCheckBlock;
+    this.logger.debug(`block sync percent: ${percent}%`);
+    this.logger.debug(`need sync block number: ${needSyncBlock}`);
+  }
+
   async lastNostartRowArray(): Promise<BlockEntity[]> {
+    // download
     const lastNostartHeightRowArray = await this.blockEntityRepository.find({
       where: {
         processStatus: BlockProcessStatus.downloaded,
@@ -82,6 +103,10 @@ export class BlockService implements OnApplicationBootstrap {
       },
       take: 100,
     });
+    if (lastNostartHeightRowArray.length > 0) {
+      return lastNostartHeightRowArray;
+    }
+    // before completed
     const maxCompletedRow = await this.blockEntityRepository.findOne({
       where: {
         processStatus: BlockProcessStatus.completed,
@@ -105,18 +130,19 @@ export class BlockService implements OnApplicationBootstrap {
       if (beforeProcess.length > 0) {
         return beforeProcess;
       }
-      const errorCompleted = await this.blockEntityRepository
-        .createQueryBuilder('block')
-        .where(
-          ' block.processStatus = :status and block.num_tx != block.process_count',
-          { status: BlockProcessStatus.completed },
-        )
-        .getMany();
-      if (errorCompleted.length > 0) {
-        return errorCompleted;
-      }
     }
-    return lastNostartHeightRowArray;
+    // error completed
+    const errorCompleted = await this.blockEntityRepository
+      .createQueryBuilder('block')
+      .where(
+        ' block.processStatus = :status and block.num_tx != block.process_count',
+        { status: BlockProcessStatus.completed },
+      )
+      .getMany();
+    if (errorCompleted.length > 0) {
+      return errorCompleted;
+    }
+    return [];
   }
 
   async downloadFile(downloadBlockRow: BlockEntity) {
@@ -157,6 +183,21 @@ export class BlockService implements OnApplicationBootstrap {
         processStatus: BlockProcessStatus.downloaded,
       },
     });
+    const completedCount = await this.blockEntityRepository.count({
+      where: {
+        processStatus: BlockProcessStatus.completed,
+      },
+    });
+    if (completedCount > 200) {
+      await this.blockEntityRepository.update(
+        {
+          processStatus: BlockProcessStatus.completed,
+        },
+        {
+          processStatus: BlockProcessStatus.nostart,
+        },
+      );
+    }
     const willCacheNumber = this.blockCacheNumber - downloadedCount;
     if (willCacheNumber <= 0) {
       return;
@@ -256,6 +297,12 @@ export class BlockService implements OnApplicationBootstrap {
     }
 
     const txIdIndexMap = {};
+    await this.blockEntityRepository.update(
+      { hash: nostartRow.hash },
+      {
+        processStatus: BlockProcessStatus.processing,
+      },
+    );
 
     const txIdList = block.transactions.map(function (value: any) {
       return value.hash;
