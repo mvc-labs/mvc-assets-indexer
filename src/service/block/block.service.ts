@@ -92,6 +92,24 @@ export class BlockService implements OnApplicationBootstrap {
     this.logger.debug(`need sync block number: ${needSyncBlock}`);
   }
 
+  @Interval(10 * 60 * 1000)
+  async progressTxIn() {
+    const noProgressCount = await this.txInEntityRepository.count({
+      where: {
+        is_processed: false,
+      },
+    });
+    if (noProgressCount > 4000) {
+      const totalInputCount = await this.txInEntityRepository.count({});
+      const percent = ((noProgressCount / totalInputCount) * 100).toFixed(2);
+      const needSyncBlock = totalInputCount - noProgressCount;
+      this.logger.debug(`txIn sync percent: ${percent}%`);
+      this.logger.debug(`need sync block number: ${needSyncBlock}`);
+    } else {
+      this.logger.debug(`indexer sync all completed`);
+    }
+  }
+
   async lastNostartRowArray(): Promise<BlockEntity[]> {
     // download
     const lastNostartHeightRowArray = await this.blockEntityRepository.find({
