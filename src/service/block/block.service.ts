@@ -101,10 +101,12 @@ export class BlockService implements OnApplicationBootstrap {
     });
     if (noProgressCount > 4000) {
       const totalInputCount = await this.txInEntityRepository.count({});
-      const percent = ((noProgressCount / totalInputCount) * 100).toFixed(2);
-      const needSyncBlock = totalInputCount - noProgressCount;
+      const percent = (
+        ((totalInputCount - noProgressCount) / totalInputCount) *
+        100
+      ).toFixed(2);
       this.logger.debug(`txIn sync percent: ${percent}%`);
-      this.logger.debug(`need sync block number: ${needSyncBlock}`);
+      this.logger.debug(`need sync txIn number: ${noProgressCount}`);
     } else {
       this.logger.debug(`indexer sync all completed`);
     }
