@@ -1,4 +1,3 @@
-
 # mvc-assets-indexer
 
 The index service for P2PKH and MetaContract Fungible Token (FT) assets on [MicroVisionChain](https://www.microvisionchain.com/).
@@ -43,3 +42,14 @@ npm run start:dev
 # production mode
 npm run start:prod
 ```
+
+## Changelog
+
+### v1.4.8 (2024-02-27)
+
+- Added
+  - block sync progress log
+  - indexer ready progress log
+- Changed
+  - optimize block sync logic, 59476 block sync time is about 5 hours.
+  - optimize database table index, 80% reduction in database pressure.
