@@ -66,6 +66,9 @@ memory_queue = queue.Queue()
 db_level_indexer = plyvel.DB(DB_LEVEL_INDEXER_PATH, create_if_missing=True)
 db_level_mempool = plyvel.DB(DB_LEVEL_MEMPOOL_PATH, create_if_missing=True)
 
+if not os.path.exists(f'{NODE_DATA_PATH}/blocks'):
+    print('Please config right NODE_DATA_PATH:', f'{NODE_DATA_PATH}')
+    exit()
 
 def mvc_node_is_safe():
     data = {
