@@ -501,9 +501,18 @@ export class BlockService implements OnApplicationBootstrap {
     if (this.transactionService.isFull()) {
       return 0;
     }
-    const nostartRowArray = await this.lastNostartRowArray();
+    const noStartRowArray = await this.lastNostartRowArray();
+    const selectArray = [];
+    let txNumber = this.transactionService.txCacheNumber();
+    for (const block of noStartRowArray) {
+      txNumber += Number(block.num_tx);
+      selectArray.push(block);
+      if (txNumber > this.transactionService.txMempoolQueueMax) {
+        break;
+      }
+    }
     const { results } = await PromisePool.withConcurrency(2)
-      .for(nostartRowArray)
+      .for(selectArray)
       .process(async (blockEntity) => {
         return await this.processOneBlock(blockEntity);
       });
@@ -529,7 +538,7 @@ export class BlockService implements OnApplicationBootstrap {
         );
       }
     }
-    return nostartRowArray.length;
+    return selectArray.length;
   }
 
   async processPendingBlock() {

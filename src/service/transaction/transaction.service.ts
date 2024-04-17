@@ -34,7 +34,7 @@ import { TxOutFtEntity } from '../../entities/txOutFtEntity';
 export class TransactionService implements OnApplicationBootstrap {
   private readonly logger = new Logger(TransactionService.name);
   private txBlockQueue: any[];
-  private readonly txMempoolQueueMax: number;
+  public readonly txMempoolQueueMax: number;
   private readonly callBackQueueAfterTxProcess: any[];
   private processRawTxQueue: any[];
   private readonly txProcessMS: number;
@@ -110,6 +110,10 @@ export class TransactionService implements OnApplicationBootstrap {
       console.log('getRawTxByRest', e);
     }
     // this.logger.debug(`hashTxFromZmq ${txid}`);
+  }
+
+  txCacheNumber() {
+    return this.txBlockQueue.length;
   }
 
   isFull() {
@@ -726,44 +730,54 @@ export class TransactionService implements OnApplicationBootstrap {
             const concurrency = 5;
             const pResultListS = Date.now();
             const p1 = PromisePool.withConcurrency(concurrency)
-              .for(arrayToChunks(transactionEntityList, stepNumber))
+              .for(
+                arrayToChunks(
+                  sortedObjectArrayByKey(transactionEntityList, 'txid'),
+                  stepNumber,
+                ),
+              )
               .process(async (chunk) => {
-                await this.transactionEntityRepository.upsert(
-                  sortedObjectArrayByKey(chunk, 'txid'),
-                  ['txid'],
-                );
+                await this.transactionEntityRepository.upsert(chunk, ['txid']);
               });
             const p2 = PromisePool.withConcurrency(concurrency)
-              .for(arrayToChunks(txInEntityList, stepNumber))
+              .for(
+                arrayToChunks(
+                  sortedObjectArrayByKey(txInEntityList, 'outpoint'),
+                  stepNumber,
+                ),
+              )
               .process(async (chunk) => {
-                await this.txInEntityRepository.upsert(
-                  sortedObjectArrayByKey(chunk, 'outpoint'),
-                  ['outpoint'],
-                );
+                await this.txInEntityRepository.upsert(chunk, ['outpoint']);
               });
             const p3 = PromisePool.withConcurrency(concurrency)
-              .for(arrayToChunks(txOutEntityList, stepNumber))
+              .for(
+                arrayToChunks(
+                  sortedObjectArrayByKey(txOutEntityList, 'outpoint'),
+                  stepNumber,
+                ),
+              )
               .process(async (chunk) => {
-                await this.txOutEntityRepository.upsert(
-                  sortedObjectArrayByKey(chunk, 'outpoint'),
-                  ['outpoint'],
-                );
+                await this.txOutEntityRepository.upsert(chunk, ['outpoint']);
               });
             const p4 = PromisePool.withConcurrency(concurrency)
-              .for(arrayToChunks(txOutNftEntityList, stepNumber))
+              .for(
+                arrayToChunks(
+                  sortedObjectArrayByKey(txOutNftEntityList, 'outpoint'),
+                  stepNumber,
+                ),
+              )
               .process(async (chunk) => {
-                await this.txOutNftEntityRepository.upsert(
-                  sortedObjectArrayByKey(chunk, 'outpoint'),
-                  ['outpoint'],
-                );
+                await this.txOutNftEntityRepository.upsert(chunk, ['outpoint']);
               });
             const p5 = PromisePool.withConcurrency(concurrency)
-              .for(arrayToChunks(txOutFtEntityList, stepNumber))
+              .for(
+                arrayToChunks(
+                  sortedObjectArrayByKey(txOutFtEntityList, 'outpoint'),
+                  stepNumber,
+                ),
+              )
               .process(async (chunk) => {
-                await this.txOutFtEntityRepository.upsert(
-                  sortedObjectArrayByKey(chunk, 'outpoint'),
-                  ['outpoint'],
-                );
+                await this.txOutFtEntityRepository.upsert(chunk, ['outpoint']);
               });
             const pResultList = await Promise.all([p1, p2, p3, p4, p5]);
             const useTime = (Date.now() - pResultListS) / 1000;
