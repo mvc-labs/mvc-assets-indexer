@@ -10,7 +10,6 @@ export class TxOutNftEntity {
   txid: string;
 
   @Column({ length: 40 })
-  @Index()
   codeHash: string;
 
   @Column({ length: 40 })

@@ -4,7 +4,6 @@ import {
   Entity,
   Index,
   PrimaryColumn,
-  UpdateDateColumn,
 } from 'typeorm';
 
 @Entity('tx')
@@ -30,10 +29,6 @@ export class TransactionEntity {
 
   @Column({ default: false })
   is_completed_check: boolean;
-
-  @Column('int', { generated: true })
-  @Index()
-  cursor_id: number;
 
   @Column({ default: false })
   is_deleted: boolean;
