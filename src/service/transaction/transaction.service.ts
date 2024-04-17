@@ -122,7 +122,7 @@ export class TransactionService implements OnApplicationBootstrap {
     txCount: number,
     isLast: boolean,
     txid: string,
-    txHex: string,
+    tx: string,
     clearBlockDataCache: any,
   ) {
     const item = {
@@ -131,7 +131,7 @@ export class TransactionService implements OnApplicationBootstrap {
       txCount,
       isLast,
       txid,
-      txHex,
+      tx,
       clearBlockDataCache,
     };
     this.txBlockQueue.push(item);
@@ -278,13 +278,12 @@ export class TransactionService implements OnApplicationBootstrap {
     txCount: number,
     isLast: boolean,
     txid: string,
-    txHex: string,
+    tx: mvc.Transaction,
     clearBlockDataCache: any,
   ) {
     const transactionEntity = this.transactionEntityRepository.create();
     transactionEntity.txid = txid;
     transactionEntity.block_hash = blockHash;
-    const tx = new mvc.Transaction(txHex);
     const txInEntityList = [];
     transactionEntity.tx_in_num = tx.inputs.length;
     transactionEntity.tx_out_num = tx.outputs.length;
@@ -386,17 +385,17 @@ export class TransactionService implements OnApplicationBootstrap {
     txCount: any;
     isLast: any;
     txid: any;
-    txHex: any;
+    tx: any;
     clearBlockDataCache: any;
   }) {
-    const { blockHash, txCount, isLast, txid, txHex, clearBlockDataCache } =
+    const { blockHash, txCount, isLast, txid, tx, clearBlockDataCache } =
       txItem;
     return await this.oneBlockTxProcessor(
       blockHash,
       txCount,
       isLast,
       txid,
-      txHex,
+      tx,
       clearBlockDataCache,
     );
   }
@@ -676,6 +675,12 @@ export class TransactionService implements OnApplicationBootstrap {
   }
 
   async txBlockProcessDaemon() {
+    // max cache tx
+    const bulkNumber = 15000;
+    // per insert number
+    const stepNumber = 1000;
+    let totalUseTime = 0;
+    let totalTxNumber = 0;
     while (true) {
       try {
         // save list
@@ -713,188 +718,110 @@ export class TransactionService implements OnApplicationBootstrap {
               clearBlockDataCacheList.push(saveInfo.clearBlockDataCache);
               txList.push(saveInfo.tx);
             }
-            const bulkNumber = 150;
-            if (txInEntityList.length > bulkNumber) {
-              const concurrency = 5;
-              const p1 = PromisePool.withConcurrency(concurrency)
-                .for(arrayToChunks(transactionEntityList, bulkNumber))
-                .process(async (chunk) => {
-                  await this.transactionEntityRepository.upsert(
-                    sortedObjectArrayByKey(chunk, 'txid'),
-                    ['txid'],
-                  );
-                });
-              const p2 = PromisePool.withConcurrency(concurrency)
-                .for(arrayToChunks(txInEntityList, bulkNumber))
-                .process(async (chunk) => {
-                  await this.txInEntityRepository.upsert(
-                    sortedObjectArrayByKey(chunk, 'outpoint'),
-                    ['outpoint'],
-                  );
-                });
-              const p3 = PromisePool.withConcurrency(concurrency)
-                .for(arrayToChunks(txOutEntityList, bulkNumber))
-                .process(async (chunk) => {
-                  await this.txOutEntityRepository.upsert(
-                    sortedObjectArrayByKey(chunk, 'outpoint'),
-                    ['outpoint'],
-                  );
-                });
-              const p4 = PromisePool.withConcurrency(concurrency)
-                .for(arrayToChunks(txOutNftEntityList, bulkNumber))
-                .process(async (chunk) => {
-                  await this.txOutNftEntityRepository.upsert(
-                    sortedObjectArrayByKey(chunk, 'outpoint'),
-                    ['outpoint'],
-                  );
-                });
-              const p5 = PromisePool.withConcurrency(concurrency)
-                .for(arrayToChunks(txOutFtEntityList, bulkNumber))
-                .process(async (chunk) => {
-                  await this.txOutFtEntityRepository.upsert(
-                    sortedObjectArrayByKey(chunk, 'outpoint'),
-                    ['outpoint'],
-                  );
-                });
-              const pResultList = await Promise.all([p1, p2, p3, p4, p5]);
-              let errorsLength = 0;
-              for (const pResult of pResultList) {
-                errorsLength += pResult.errors.length;
-                if (pResult.errors.length > 0) {
-                  console.log(pResult.errors[0]);
-                }
+          }
+          if (
+            txList.length >= bulkNumber ||
+            (this.txBlockQueue.length === 0 && txidList.length > 0)
+          ) {
+            const concurrency = 5;
+            const pResultListS = Date.now();
+            const p1 = PromisePool.withConcurrency(concurrency)
+              .for(arrayToChunks(transactionEntityList, stepNumber))
+              .process(async (chunk) => {
+                await this.transactionEntityRepository.upsert(
+                  sortedObjectArrayByKey(chunk, 'txid'),
+                  ['txid'],
+                );
+              });
+            const p2 = PromisePool.withConcurrency(concurrency)
+              .for(arrayToChunks(txInEntityList, stepNumber))
+              .process(async (chunk) => {
+                await this.txInEntityRepository.upsert(
+                  sortedObjectArrayByKey(chunk, 'outpoint'),
+                  ['outpoint'],
+                );
+              });
+            const p3 = PromisePool.withConcurrency(concurrency)
+              .for(arrayToChunks(txOutEntityList, stepNumber))
+              .process(async (chunk) => {
+                await this.txOutEntityRepository.upsert(
+                  sortedObjectArrayByKey(chunk, 'outpoint'),
+                  ['outpoint'],
+                );
+              });
+            const p4 = PromisePool.withConcurrency(concurrency)
+              .for(arrayToChunks(txOutNftEntityList, stepNumber))
+              .process(async (chunk) => {
+                await this.txOutNftEntityRepository.upsert(
+                  sortedObjectArrayByKey(chunk, 'outpoint'),
+                  ['outpoint'],
+                );
+              });
+            const p5 = PromisePool.withConcurrency(concurrency)
+              .for(arrayToChunks(txOutFtEntityList, stepNumber))
+              .process(async (chunk) => {
+                await this.txOutFtEntityRepository.upsert(
+                  sortedObjectArrayByKey(chunk, 'outpoint'),
+                  ['outpoint'],
+                );
+              });
+            const pResultList = await Promise.all([p1, p2, p3, p4, p5]);
+            const useTime = (Date.now() - pResultListS) / 1000;
+            totalUseTime += useTime;
+            totalTxNumber += txList.length;
+            const tps = (txList.length / useTime).toFixed(2);
+            const aveTps = (totalTxNumber / totalUseTime).toFixed(2);
+            this.logger.debug(
+              `bulk save ${txList.length} tx, useTime: ${useTime} tps: ${tps} aveTps: ${aveTps}`,
+            );
+            let errorsLength = 0;
+            for (const pResult of pResultList) {
+              errorsLength += pResult.errors.length;
+              if (pResult.errors.length > 0) {
+                console.log(pResult.errors[0]);
               }
-              // end bulk do
-              if (errorsLength === 0) {
-                for (let j = 0; j < isLastList.length; j++) {
-                  const txid = txidList[j];
-                  const transactionEntity = transactionEntityList[j];
-                  const isLast = isLastList[j];
-                  const txCount = txCountList[j];
-                  const blockHash = blockHashList[j];
-                  const clearBlockDataCache = clearBlockDataCacheList[j];
-                  const tx = txList[j];
-                  await this.blockEndDo(
-                    isLast,
-                    txCount,
-                    blockHash,
-                    clearBlockDataCache,
-                  );
-                  for (const callBack of this.callBackQueueAfterTxProcess) {
-                    callBack(txid, tx, lastTxItem.txHex, transactionEntity);
-                  }
-                }
-              } else {
-                this.logger.debug(`errorsLength ${errorsLength}`);
-                this.txBlockQueue.push(...beforeItemList);
-              }
-              // save list
-              transactionEntityList = [];
-              txInEntityList = [];
-              txOutEntityList = [];
-              txOutNftEntityList = [];
-              txOutFtEntityList = [];
-              // field list
-              txidList = [];
-              txList = [];
-              blockHashList = [];
-              txCountList = [];
-              isLastList = [];
-              clearBlockDataCacheList = [];
             }
-          } else {
-            if (txidList.length > 0) {
-              const concurrency = 5;
-              const bulkNumber = 300;
-              const p1 = PromisePool.withConcurrency(concurrency)
-                .for(arrayToChunks(transactionEntityList, bulkNumber))
-                .process(async (chunk) => {
-                  await this.transactionEntityRepository.upsert(
-                    sortedObjectArrayByKey(chunk, 'txid'),
-                    ['txid'],
-                  );
-                });
-              const p2 = PromisePool.withConcurrency(concurrency)
-                .for(arrayToChunks(txInEntityList, bulkNumber))
-                .process(async (chunk) => {
-                  await this.txInEntityRepository.upsert(
-                    sortedObjectArrayByKey(chunk, 'outpoint'),
-                    ['outpoint'],
-                  );
-                });
-              const p3 = PromisePool.withConcurrency(concurrency)
-                .for(arrayToChunks(txOutEntityList, bulkNumber))
-                .process(async (chunk) => {
-                  await this.txOutEntityRepository.upsert(
-                    sortedObjectArrayByKey(chunk, 'outpoint'),
-                    ['outpoint'],
-                  );
-                });
-              const p4 = PromisePool.withConcurrency(concurrency)
-                .for(arrayToChunks(txOutNftEntityList, bulkNumber))
-                .process(async (chunk) => {
-                  await this.txOutNftEntityRepository.upsert(
-                    sortedObjectArrayByKey(chunk, 'outpoint'),
-                    ['outpoint'],
-                  );
-                });
-              const p5 = PromisePool.withConcurrency(concurrency)
-                .for(arrayToChunks(txOutFtEntityList, bulkNumber))
-                .process(async (chunk) => {
-                  await this.txOutFtEntityRepository.upsert(
-                    sortedObjectArrayByKey(chunk, 'outpoint'),
-                    ['outpoint'],
-                  );
-                });
-              const pResultList = await Promise.all([p1, p2, p3, p4, p5]);
-              let errorsLength = 0;
-              for (const pResult of pResultList) {
-                errorsLength += pResult.errors.length;
-                if (pResult.errors.length > 0) {
-                  console.log(pResult.errors[0]);
+            // end bulk do
+            if (errorsLength === 0) {
+              for (let j = 0; j < isLastList.length; j++) {
+                const txid = txidList[j];
+                const transactionEntity = transactionEntityList[j];
+                const isLast = isLastList[j];
+                const txCount = txCountList[j];
+                const blockHash = blockHashList[j];
+                const clearBlockDataCache = clearBlockDataCacheList[j];
+                const tx = txList[j];
+                await this.blockEndDo(
+                  isLast,
+                  txCount,
+                  blockHash,
+                  clearBlockDataCache,
+                );
+                for (const callBack of this.callBackQueueAfterTxProcess) {
+                  callBack(txid, tx, lastTxItem.txHex, transactionEntity);
                 }
               }
-              // end bulk do
-              if (errorsLength === 0) {
-                for (let j = 0; j < isLastList.length; j++) {
-                  const txid = txidList[j];
-                  const transactionEntity = transactionEntityList[j];
-                  const isLast = isLastList[j];
-                  const txCount = txCountList[j];
-                  const blockHash = blockHashList[j];
-                  const clearBlockDataCache = clearBlockDataCacheList[j];
-                  const tx = txList[j];
-                  await this.blockEndDo(
-                    isLast,
-                    txCount,
-                    blockHash,
-                    clearBlockDataCache,
-                  );
-                  for (const callBack of this.callBackQueueAfterTxProcess) {
-                    callBack(txid, tx, lastTxItem.txHex, transactionEntity);
-                  }
-                }
-              } else {
-                this.logger.debug(`errorsLength ${errorsLength}`);
-                this.txBlockQueue.push(...beforeItemList);
-              }
-
-              // save list
-              transactionEntityList = [];
-              txInEntityList = [];
-              txOutEntityList = [];
-              txOutNftEntityList = [];
-              txOutFtEntityList = [];
-              // field list
-              txidList = [];
-              txList = [];
-              blockHashList = [];
-              txCountList = [];
-              isLastList = [];
-              clearBlockDataCacheList = [];
-              beforeItemList = [];
+            } else {
+              this.logger.debug(`errorsLength ${errorsLength}`);
+              this.txBlockQueue.push(...beforeItemList);
             }
-            await sleep(500);
+            // save list
+            transactionEntityList = [];
+            txInEntityList = [];
+            txOutEntityList = [];
+            txOutNftEntityList = [];
+            txOutFtEntityList = [];
+            // field list
+            txidList = [];
+            txList = [];
+            blockHashList = [];
+            txCountList = [];
+            isLastList = [];
+            clearBlockDataCacheList = [];
+            beforeItemList = [];
+          }
+          if (this.txBlockQueue.length === 0) {
+            await sleep(200);
           }
         }
       } catch (e) {
@@ -955,42 +882,34 @@ export class TransactionService implements OnApplicationBootstrap {
   }
 
   async useTxo() {
-    const beforeQ = new Date();
-    const bulkNumber = 2000;
-    const lastCursorIdEntity = await this.txInEntityRepository.findOne({
-      where: {
-        is_processed: false,
-      },
-      order: {
-        cursor_id: 'asc',
-      },
-    });
-    if (!lastCursorIdEntity) {
-      return;
-    }
-    const afterQ = new Date();
-    const cursorId = lastCursorIdEntity.cursor_id;
+    const bulkNumber = 4000;
     const beforeU = new Date();
     const updateResult: { changedRows: number; info: string } =
       await this.txInEntityRepository.query(
         `
-      UPDATE 
-        tx_in JOIN tx_out ON (tx_in.outpoint = tx_out.outpoint)
-      SET 
-        tx_in.is_processed = TRUE, tx_out.is_used = TRUE
-      WHERE
-        tx_in.cursor_id >= ? AND tx_in.cursor_id  < ? AND tx_in.is_processed = FALSE;
+        UPDATE
+            tx_in ti
+        JOIN (
+            SELECT
+                tx_in.outpoint as outpoint 
+            FROM
+                tx_in
+            JOIN tx_out on (tx_in.outpoint = tx_out.outpoint)
+            WHERE
+                tx_in.is_processed = FALSE
+            LIMIT ?) til 
+        ON (ti.outpoint = til.outpoint)
+        JOIN tx_out txo ON (ti.outpoint = txo.outpoint)
+        SET ti.is_processed = TRUE, txo.is_used = TRUE;
     `,
-        [cursorId, cursorId + bulkNumber],
+        [bulkNumber],
       );
     const afterU = new Date();
     if (updateResult.changedRows > 0) {
       this.logger.debug(
-        `timeQuery: ${afterQ.getTime() - beforeQ.getTime()}, timeUpdate: ${
-          afterU.getTime() - beforeU.getTime()
-        }, info: ${
+        `timeUpdate: ${afterU.getTime() - beforeU.getTime()}, info: ${
           updateResult.info
-        }, cursorId: ${cursorId}, lastCursorId: ${cursorId}`,
+        }`,
       );
     }
     return updateResult.changedRows;

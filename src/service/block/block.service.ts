@@ -467,27 +467,27 @@ export class BlockService implements OnApplicationBootstrap {
       for (let i = 0; i < notExistsTxIdList.length - 1; i++) {
         const _txid = notExistsTxIdList[i];
         const _txidIndex = txIdIndexMap[_txid];
-        const txHex = block.transactions[_txidIndex].serialize(true);
+        const tx = block.transactions[_txidIndex];
         this.transactionService.txFromBlock(
           nostartRow.height,
           nostartRow.hash,
           nostartRow.num_tx,
           false,
           _txid,
-          txHex,
+          tx,
           this.clearBlockDataCache.bind(this),
         );
       }
       const _txid = notExistsTxIdList[notExistsTxIdList.length - 1];
       const _txidIndex = txIdIndexMap[_txid];
-      const txHex = block.transactions[_txidIndex].serialize(true);
+      const tx = block.transactions[_txidIndex];
       lastRow = [
         nostartRow.height,
         nostartRow.hash,
         nostartRow.num_tx,
         true,
         _txid,
-        txHex,
+        tx,
         this.clearBlockDataCache.bind(this),
       ];
     }
@@ -498,8 +498,11 @@ export class BlockService implements OnApplicationBootstrap {
   }
   //
   async processBlock() {
+    if (this.transactionService.isFull()) {
+      return 0;
+    }
     const nostartRowArray = await this.lastNostartRowArray();
-    const { results } = await PromisePool.withConcurrency(3)
+    const { results } = await PromisePool.withConcurrency(2)
       .for(nostartRowArray)
       .process(async (blockEntity) => {
         return await this.processOneBlock(blockEntity);
@@ -526,6 +529,7 @@ export class BlockService implements OnApplicationBootstrap {
         );
       }
     }
+    return nostartRowArray.length;
   }
 
   async processPendingBlock() {
@@ -838,47 +842,57 @@ export class BlockService implements OnApplicationBootstrap {
   }
   //
   private async daemonProcessBlock() {
+    let l = 0;
     while (true) {
       try {
-        await this.processBlock();
+        l = await this.processBlock();
       } catch (e) {
         console.log('daemonProcessBlock error', e);
       }
-      await sleep(this.blockDownloadMS);
+      if (l === 0) {
+        await sleep(this.blockDownloadMS);
+      }
     }
   }
 
-  private async doubleCheckBlock() {
-    const completedBlock = await this.blockEntityRepository.findOne({
-      where: {
-        processStatus: BlockProcessStatus.completed,
-        is_reorg: false,
-      },
-      order: {
-        cursor_id: 'asc',
-      },
-    });
+  private async doubleCheckBlock(completedBlock: BlockEntity) {
     if (completedBlock) {
-      const records: any[] = await this.transactionEntityRepository
+      const records: {
+        tx_in_num_total: string;
+        tx_out_num_total: string;
+        tx_out_0_satoshi_total: string;
+      }[] = await this.transactionEntityRepository
         .createQueryBuilder('tx')
         .where(' block_hash = :block_hash', {
           block_hash: completedBlock.hash,
         })
         .select([])
-        .addSelect('is_completed_check')
-        .addSelect('COUNT(*)', 'completed_count')
-        .groupBy('is_completed_check')
+        .addSelect('SUM(tx.tx_in_num)', 'tx_in_num_total')
+        .addSelect('SUM(tx.tx_out_num)', 'tx_out_num_total')
+        .addSelect('SUM(tx.tx_out_0_satoshi)', 'tx_out_0_satoshi_total')
         .getRawMany();
-      let pass = false;
-      for (const record of records) {
-        if (
-          record.is_completed_check === 1 &&
-          Number(record.completed_count) === completedBlock.num_tx
-        ) {
-          pass = true;
-          break;
-        }
-      }
+      const txInCountRaw: { ct: string }[] =
+        await this.transactionEntityRepository.query(
+          `
+        SELECT COUNT(*) as ct FROM tx JOIN tx_in ON tx.txid = tx_in.txid WHERE block_hash = ?
+      `,
+          [completedBlock.hash],
+        );
+      const txOutCountRaw: { ct: string }[] =
+        await this.transactionEntityRepository.query(
+          `
+            SELECT COUNT(*) as ct FROM tx JOIN tx_out ON tx.txid = tx_out.txid WHERE block_hash = ? `,
+          [completedBlock.hash],
+        );
+      const record = records[0];
+      const txInCount = Number(txInCountRaw[0].ct || '0');
+      const txOutCount = Number(txOutCountRaw[0].ct || '0');
+      const expectedTxInNumber = Number(record.tx_in_num_total || '1') - 1;
+      const expectedTxOutNumber =
+        Number(record.tx_out_num_total || '1') -
+        Number(record.tx_out_0_satoshi_total || '0');
+      const pass =
+        expectedTxInNumber === txInCount && expectedTxOutNumber == txOutCount;
       if (pass) {
         await this.blockEntityRepository.update(
           { hash: completedBlock.hash },
@@ -886,6 +900,11 @@ export class BlockService implements OnApplicationBootstrap {
             processStatus: BlockProcessStatus.doubleCheck,
           },
         );
+        await this.transactionEntityRepository.update(
+          { block_hash: completedBlock.hash },
+          { is_completed_check: true },
+        );
+        this.logger.debug(`block ${completedBlock.hash} double check pass`);
       } else {
         this.logger.debug(
           `update block from ${completedBlock.hash} to nostart, doubleCheckBlock`,
@@ -906,8 +925,17 @@ export class BlockService implements OnApplicationBootstrap {
   private async daemonDoubleCheckBlock() {
     while (true) {
       try {
-        const ct = await this.doubleCheckBlock();
-        if (!ct) {
+        const completedBlockList = await this.blockEntityRepository.find({
+          where: {
+            processStatus: BlockProcessStatus.completed,
+            is_reorg: false,
+          },
+          take: 5,
+        });
+        await Promise.all(
+          completedBlockList.map((value) => this.doubleCheckBlock(value)),
+        );
+        if (completedBlockList.length === 0) {
           await sleep(1000);
         }
       } catch (e) {
