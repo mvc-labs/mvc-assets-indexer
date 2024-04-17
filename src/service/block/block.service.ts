@@ -511,7 +511,7 @@ export class BlockService implements OnApplicationBootstrap {
         break;
       }
     }
-    const { results } = await PromisePool.withConcurrency(2)
+    const { results } = await PromisePool.withConcurrency(5)
       .for(selectArray)
       .process(async (blockEntity) => {
         return await this.processOneBlock(blockEntity);
