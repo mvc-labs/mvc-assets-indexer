@@ -10,6 +10,7 @@ import { PromisePool } from '@supercharge/promise-pool';
 import axios from 'axios';
 import { AdminService } from '../../routes/admin/admin.service';
 import { GlobalConfigKey } from '../../constants/Global';
+import { FindOperator } from 'typeorm/find-options/FindOperator';
 
 @Injectable()
 export class NotifyService implements OnApplicationBootstrap {
@@ -29,23 +30,27 @@ export class NotifyService implements OnApplicationBootstrap {
   private async daemonProcessNotifyTx() {
     while (true) {
       try {
-        await this.processNotifyTx();
+        await Promise.all([
+          // push unconfirmed
+          this.processNotifyTx(IsNull()),
+          // push confirmed
+          this.processNotifyTx(Not(IsNull())),
+        ]);
       } catch (e) {
         console.log('daemonProcessNotifyTx error', e);
       }
-      await sleep(5000);
+      await sleep(3000);
     }
   }
 
-  private async processNotifyTx() {
-    // notify on in block
+  private async processNotifyTx(block_hash: FindOperator<any>) {
     const pendingNotifyTxList = await this.transactionEntityRepository.find({
       where: {
-        block_hash: Not(IsNull()),
+        block_hash: block_hash,
         is_completed_check: true,
         notify_status: NotifyStatus.shouldNotify,
       },
-      select: ['txid', 'notify_status'],
+      select: ['txid', 'block_hash', 'notify_status'],
       take: 2000,
     });
     const callbackUrl = await this.adminService.getConfigValueByKey(
@@ -57,11 +62,12 @@ export class NotifyService implements OnApplicationBootstrap {
         transactionEntity.notify_status = NotifyStatus.completed;
         const data = {
           txid: transactionEntity.txid,
+          confirmed: !!transactionEntity.block_hash,
         };
         const resp = await axios.post(callbackUrl, data);
         if (resp.data && resp.data.success === true) {
           this.logger.debug(
-            `notify callback url ${callbackUrl} txid ${transactionEntity.txid}`,
+            `notify callback url ${callbackUrl} txid ${transactionEntity.txid} block hash ${transactionEntity.block_hash}`,
           );
           await this.transactionEntityRepository.update(
             {
