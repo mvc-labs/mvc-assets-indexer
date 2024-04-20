@@ -73,6 +73,10 @@ export class TransactionService implements OnApplicationBootstrap {
     this.useTxoDaemon().then();
   }
 
+  onAfterTxProcess(func: any) {
+    this.callBackQueueAfterTxProcess.push(func);
+  }
+
   rawTxFromZmq(rawTx: Buffer) {
     this.processRawTxQueue.push(rawTx);
   }
@@ -739,7 +743,7 @@ export class TransactionService implements OnApplicationBootstrap {
               .process(async (chunk) => {
                 await this.transactionEntityRepository.upsert(chunk, ['txid']);
               });
-            const p2 = PromisePool.withConcurrency(concurrency)
+            const p2 = PromisePool.withConcurrency(concurrency * 2)
               .for(
                 arrayToChunks(
                   sortedObjectArrayByKey(txInEntityList, 'outpoint'),
@@ -749,7 +753,7 @@ export class TransactionService implements OnApplicationBootstrap {
               .process(async (chunk) => {
                 await this.txInEntityRepository.upsert(chunk, ['outpoint']);
               });
-            const p3 = PromisePool.withConcurrency(concurrency)
+            const p3 = PromisePool.withConcurrency(concurrency * 2)
               .for(
                 arrayToChunks(
                   sortedObjectArrayByKey(txOutEntityList, 'outpoint'),
@@ -786,7 +790,7 @@ export class TransactionService implements OnApplicationBootstrap {
             const tps = (txList.length / useTime).toFixed(2);
             const aveTps = (totalTxNumber / totalUseTime).toFixed(2);
             this.logger.debug(
-              `bulk save ${txList.length} tx, useTime: ${useTime} tps: ${tps} aveTps: ${aveTps}`,
+              `bulk save ${txList.length} tx ${txInEntityList.length} txIn ${txOutEntityList.length} txOut, useTime: ${useTime} tps: ${tps} aveTps: ${aveTps}`,
             );
             let errorsLength = 0;
             for (const pResult of pResultList) {
