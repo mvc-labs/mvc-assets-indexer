@@ -1,14 +1,11 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { ZmqService } from '../zmq/zmq.service';
 import { InjectRepository } from '@nestjs/typeorm';
+import { IsNull, LessThan, Repository } from 'typeorm';
 import {
-  IsNull,
-  LessThan,
-  MoreThan,
-  MoreThanOrEqual,
-  Repository,
-} from 'typeorm';
-import { TransactionEntity } from '../../entities/transaction.entity';
+  NotifyStatus,
+  TransactionEntity,
+} from '../../entities/transaction.entity';
 import * as mvc from 'mvc-lib';
 import {
   arrayToChunks,
@@ -29,6 +26,7 @@ import { PromisePool } from '@supercharge/promise-pool';
 import { OutputType, TxDecoder } from 'meta-contract';
 import { TxOutNftEntity } from '../../entities/txOutNftEntity';
 import { TxOutFtEntity } from '../../entities/txOutFtEntity';
+import { AdminService } from '../../routes/admin/admin.service';
 
 @Injectable()
 export class TransactionService implements OnApplicationBootstrap {
@@ -55,6 +53,7 @@ export class TransactionService implements OnApplicationBootstrap {
     private readonly configService: ConfigService,
     private readonly zmqService: ZmqService,
     private readonly rpcService: RpcService,
+    private readonly adminService: AdminService,
   ) {
     this.txBlockQueue = [];
     this.txMempoolQueueMax = 10000;
@@ -221,10 +220,16 @@ export class TransactionService implements OnApplicationBootstrap {
         newUtxo.address_hex = new mvc.Address(
           outputInfo.data.tokenAddress,
         ).hashBuffer.toString('hex');
+        if (this.adminService.isExistsAddress(newUtxo.address_hex)) {
+          transactionEntity.notify_status = NotifyStatus.shouldNotify;
+        }
       } else if (outputInfo.type === OutputType.P2PKH) {
         newUtxo.address_hex = output.script
           .toAddress()
           .hashBuffer.toString('hex');
+        if (this.adminService.isExistsAddress(newUtxo.address_hex)) {
+          transactionEntity.notify_status = NotifyStatus.shouldNotify;
+        }
       } else if (outputInfo.type === OutputType.OP_RETURN) {
         newUtxo.address_hex = 'unknown';
       } else if (outputInfo.type === OutputType.UNKNOWN) {
@@ -355,10 +360,16 @@ export class TransactionService implements OnApplicationBootstrap {
         newUtxo.address_hex = new mvc.Address(
           outputInfo.data.tokenAddress,
         ).hashBuffer.toString('hex');
+        if (this.adminService.isExistsAddress(newUtxo.address_hex)) {
+          transactionEntity.notify_status = NotifyStatus.shouldNotify;
+        }
       } else if (outputInfo.type === OutputType.P2PKH) {
         newUtxo.address_hex = output.script
           .toAddress()
           .hashBuffer.toString('hex');
+        if (this.adminService.isExistsAddress(newUtxo.address_hex)) {
+          transactionEntity.notify_status = NotifyStatus.shouldNotify;
+        }
       } else if (outputInfo.type === OutputType.OP_RETURN) {
         newUtxo.address_hex = 'unknown';
       } else if (outputInfo.type === OutputType.UNKNOWN) {
