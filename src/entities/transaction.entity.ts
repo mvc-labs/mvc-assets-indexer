@@ -7,9 +7,9 @@ import {
 } from 'typeorm';
 
 export enum NotifyStatus {
-  noStart = 'noStart',
-  shouldNotify = 'shouldNotify',
-  completed = 'completed',
+  noStart,
+  shouldNotify,
+  completed,
 }
 
 @Entity('tx')
