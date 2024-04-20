@@ -12,7 +12,4 @@ export class KeyEntity {
 
   @Column()
   role: KeyRole;
-
-  @Column({ nullable: true })
-  callbackUrl: string;
 }

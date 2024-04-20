@@ -30,19 +30,13 @@ export class AdminService implements OnModuleInit {
 
   private async presetConfig() {}
 
-  public async addKey(
-    pubkey: string,
-    role: KeyRole,
-    callbackUrl: string,
-    save: boolean,
-  ) {
+  public async addKey(pubkey: string, role: KeyRole, save: boolean) {
     this.pubkeyMap.set(pubkey, true);
     this.addressHexMap.set(hash160(pubkey).toString('hex'), true);
     if (save) {
       const notifyEntity = this.keyEntityRepository.create();
       notifyEntity.key = pubkey;
       notifyEntity.role = role;
-      notifyEntity.callbackUrl = callbackUrl;
       await this.keyEntityRepository.save(notifyEntity);
     }
   }
@@ -58,7 +52,7 @@ export class AdminService implements OnModuleInit {
       },
     });
     for (const key of keys) {
-      await this.addKey(key.key, key.role, key.callbackUrl, false);
+      await this.addKey(key.key, key.role, false);
     }
   }
 
@@ -132,8 +126,8 @@ export class AdminService implements OnModuleInit {
 
   async addAuthPubkey(pubkeyNotifyDto: PubkeyNotifyDto) {
     const { publicKey, publicKeySign, notifyPubkey } = pubkeyNotifyDto;
-    if (await this.checkSig(publicKey, publicKeySign, publicKey)) {
-      await this.addKey(notifyPubkey, KeyRole.auth, null, true);
+    if (await this.checkSig(notifyPubkey, publicKeySign, publicKey)) {
+      await this.addKey(notifyPubkey, KeyRole.auth, true);
       return commonResponse(0, 'success', null);
     }
     return commonResponse(-1, 'sig error', null);
@@ -141,13 +135,8 @@ export class AdminService implements OnModuleInit {
 
   async addListenPubkey(pubkeyNotifyDto: PubkeyNotifyDto) {
     const { publicKey, publicKeySign, notifyPubkey } = pubkeyNotifyDto;
-    if (await this.checkSig(publicKey, publicKeySign, publicKey)) {
-      await this.addKey(
-        notifyPubkey,
-        KeyRole.listen,
-        pubkeyNotifyDto.callbackUrl,
-        true,
-      );
+    if (await this.checkSig(notifyPubkey, publicKeySign, publicKey)) {
+      await this.addKey(notifyPubkey, KeyRole.listen, true);
       return commonResponse(0, 'success', null);
     }
     return commonResponse(-1, 'sig error', null);
