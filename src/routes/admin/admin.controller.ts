@@ -18,7 +18,6 @@ export class AdminController {
     this.logger.debug(body.pubkey);
     this.logger.debug(body.sig);
     const saveInfo = await this.adminService.commitInit(body.pubkey, body.sig);
-
     if (saveInfo) {
       return commonResponse(0, 'admin key init', null);
     } else {
@@ -32,9 +31,21 @@ export class AdminController {
       await this.adminService.checkAdminSig(body.sig, JSON.stringify(body.data))
     ) {
       const [pass, msg] = await this.adminService.updateAdminPub(body.data);
-      //   return isMember ? '$2.00' : '$10.00';
       const code = pass ? 0 : -1;
       return commonResponse(code, msg as unknown as string, null);
+    } else {
+      return commonResponse(-1, 'sig error', null);
+    }
+  }
+
+  @Post('/updateConfig')
+  async updateConfig(@Body() body: { sig: string; data: any }) {
+    if (
+      await this.adminService.checkAdminSig(body.sig, JSON.stringify(body.data))
+    ) {
+      const pass = await this.adminService.updateConfig(body);
+      const code = pass ? 0 : -1;
+      return commonResponse(code, '', null);
     } else {
       return commonResponse(-1, 'sig error', null);
     }

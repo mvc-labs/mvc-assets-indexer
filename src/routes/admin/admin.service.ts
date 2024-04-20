@@ -41,6 +41,21 @@ export class AdminService implements OnModuleInit {
     }
   }
 
+  public async getConfigValueByKey(key: string, change?: any) {
+    const entity = await this.configEntityRepository.findOneBy({
+      key: key,
+    });
+    if (entity) {
+      if (!change) {
+        return entity.value;
+      } else {
+        return change(entity.value);
+      }
+    } else {
+      return null;
+    }
+  }
+
   public isExistsAddress(addressHex: string) {
     return this.addressHexMap.get(addressHex) || false;
   }
@@ -140,5 +155,23 @@ export class AdminService implements OnModuleInit {
       return commonResponse(0, 'success', null);
     }
     return commonResponse(-1, 'sig error', null);
+  }
+
+  async updateConfig(body: { sig: string; data: any }) {
+    const { sig, data } = body;
+    if (await this.checkAdminSig(sig, JSON.stringify(data))) {
+      if (data.key === GlobalConfigKey.callbackUrl) {
+        const config = this.configEntityRepository.create();
+        config.key = GlobalConfigKey.callbackUrl;
+        config.value = data.value;
+        console.log(config);
+        await this.configEntityRepository.save(config);
+      } else {
+        return false;
+      }
+      return true;
+    } else {
+      return false;
+    }
   }
 }
