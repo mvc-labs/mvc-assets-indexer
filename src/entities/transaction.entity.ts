@@ -6,6 +6,12 @@ import {
   PrimaryColumn,
 } from 'typeorm';
 
+export enum NotifyStatus {
+  noStart = 'noStart',
+  shouldNotify = 'shouldNotify',
+  completed = 'completed',
+}
+
 @Entity('tx')
 export class TransactionEntity {
   @PrimaryColumn({ length: 64 })
@@ -32,6 +38,10 @@ export class TransactionEntity {
 
   @Column({ default: false })
   is_deleted: boolean;
+
+  @Column({ default: NotifyStatus.noStart })
+  @Index()
+  notify_status: NotifyStatus;
 
   @CreateDateColumn()
   created_at: Date;
