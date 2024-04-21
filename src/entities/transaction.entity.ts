@@ -43,6 +43,10 @@ export class TransactionEntity {
   @Index()
   notify_status: NotifyStatus;
 
+  @Column({ default: false })
+  @Index()
+  mempool_push: boolean;
+
   @CreateDateColumn()
   created_at: Date;
 }

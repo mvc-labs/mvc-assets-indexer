@@ -32,9 +32,9 @@ export class NotifyService implements OnApplicationBootstrap {
       try {
         await Promise.all([
           // push unconfirmed
-          this.processNotifyTx(IsNull()),
+          this.processNotifyTxUnConfirmed(),
           // push confirmed
-          this.processNotifyTx(Not(IsNull())),
+          this.processNotifyTxConfirmed(),
         ]);
       } catch (e) {
         console.log('daemonProcessNotifyTx error', e);
@@ -43,10 +43,52 @@ export class NotifyService implements OnApplicationBootstrap {
     }
   }
 
-  private async processNotifyTx(block_hash: FindOperator<any>) {
+  private async processNotifyTxUnConfirmed() {
     const pendingNotifyTxList = await this.transactionEntityRepository.find({
       where: {
-        block_hash: block_hash,
+        block_hash: IsNull(),
+        is_completed_check: true,
+        notify_status: NotifyStatus.shouldNotify,
+        mempool_push: false,
+      },
+      select: ['txid', 'block_hash', 'notify_status'],
+      take: 2000,
+    });
+    const callbackUrl = await this.adminService.getConfigValueByKey(
+      GlobalConfigKey.callbackUrl,
+    );
+    const { errors } = await PromisePool.withConcurrency(5)
+      .for(pendingNotifyTxList)
+      .process(async (transactionEntity) => {
+        transactionEntity.notify_status = NotifyStatus.completed;
+        const data = {
+          txid: transactionEntity.txid,
+          confirmed: !!transactionEntity.block_hash,
+        };
+        const resp = await axios.post(callbackUrl, data);
+        if (resp.data && resp.data.success === true) {
+          this.logger.debug(
+            `notify callback url ${callbackUrl} txid ${transactionEntity.txid} block hash ${transactionEntity.block_hash}`,
+          );
+          await this.transactionEntityRepository.update(
+            {
+              txid: transactionEntity.txid,
+            },
+            {
+              mempool_push: true,
+            },
+          );
+        }
+      });
+    if (errors.length > 0) {
+      console.log('processNotifyTx errors:', errors);
+    }
+  }
+
+  private async processNotifyTxConfirmed() {
+    const pendingNotifyTxList = await this.transactionEntityRepository.find({
+      where: {
+        block_hash: Not(IsNull()),
         is_completed_check: true,
         notify_status: NotifyStatus.shouldNotify,
       },

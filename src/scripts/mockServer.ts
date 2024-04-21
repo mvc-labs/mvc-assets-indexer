@@ -4,17 +4,23 @@ import * as bodyParser from 'koa-bodyparser';
 import { Context } from 'koa';
 
 const callback = (context: Context) => {
-  const body: { txid: string } = context.request.body as unknown as any;
+  const body: { txid: string; confirmed: boolean } = context.request
+    .body as unknown as any;
   /*
   Todo
   1. get tx raw from rpc
   2. parse tx get address and utxo type
-      if p2pkh
+      if type = p2pkh
+        do logic
+      else if type = ft
+        check token is fake
+        if token is true
+          do logic
+        else
+          pass
+      else:
         pass
-      else if ft
-        check token
-  3. do logic
-  4. response json { "success": true }
+  3. final response json { "success": true }
   */
   context.body = {
     success: true,
@@ -42,7 +48,7 @@ const main = async () => {
   app.use(router.allowedMethods());
   const port = parseInt(process.env.PORT || '15001');
   app.listen(port);
-  console.log(`Koa application is up and running on port ${port}`);
+  console.log(`Mock server is up and running on port ${port}`);
 };
 
 main().then();
