@@ -56,7 +56,7 @@ export class TransactionService implements OnApplicationBootstrap {
     private readonly adminService: AdminService,
   ) {
     this.txBlockQueue = [];
-    this.txMempoolQueueMax = 10000;
+    this.txMempoolQueueMax = 20000;
     this.zmqService.onRawTx(this.rawTxFromZmq.bind(this));
     this.callBackQueueAfterTxProcess = [];
     this.processRawTxQueue = [];
@@ -694,10 +694,11 @@ export class TransactionService implements OnApplicationBootstrap {
   }
 
   async txBlockProcessDaemon() {
-    // max cache tx
-    const bulkNumber = 15000;
+    const concurrency = 5;
     // per insert number
     const stepNumber = 1000;
+    // max cache tx
+    const bulkNumber = stepNumber * concurrency;
     let totalUseTime = 0;
     let totalTxNumber = 0;
     while (true) {
@@ -742,7 +743,6 @@ export class TransactionService implements OnApplicationBootstrap {
             txList.length >= bulkNumber ||
             (this.txBlockQueue.length === 0 && txidList.length > 0)
           ) {
-            const concurrency = 5;
             const pResultListS = Date.now();
             const p1 = PromisePool.withConcurrency(concurrency)
               .for(
