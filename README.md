@@ -45,6 +45,11 @@ npm run start:prod
 
 ## Changelog
 
+### v1.4.9 (2024-04-22)
+
+- Added
+  - [subscribe address tx](./docs/sub-address.md)
+
 ### v1.4.8 (2024-02-27)
 
 - Added
