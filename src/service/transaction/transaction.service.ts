@@ -249,7 +249,10 @@ export class TransactionService implements OnApplicationBootstrap {
       .catch();
     await Promise.all([
       (async () => {
-        const txInEntityListSubSet = arrayToChunks(txInEntityList, 100);
+        const txInEntityListSubSet = arrayToChunks(
+          sortedObjectArrayByKey(txInEntityList, 'outpoint'),
+          100,
+        );
         const { errors } = await PromisePool.withConcurrency(2)
           .for(txInEntityListSubSet)
           .process(async (txInEntityListSub) => {
@@ -262,11 +265,16 @@ export class TransactionService implements OnApplicationBootstrap {
         }
       })(),
       (async () => {
-        const txOutEntityListSubSet = arrayToChunks(txOutEntityList, 100);
+        const txOutEntityListSubSet = arrayToChunks(
+          sortedObjectArrayByKey(txOutEntityList, 'outpoint'),
+          100,
+        );
         await PromisePool.withConcurrency(2)
           .for(txOutEntityListSubSet)
           .process(async (txOutEntityListSub) => {
-            await this.txOutEntityRepository.save(txOutEntityListSub);
+            await this.txOutEntityRepository.upsert(txOutEntityListSub, [
+              'outpoint',
+            ]);
           });
       })(),
     ]);
