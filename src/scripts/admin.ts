@@ -53,6 +53,20 @@ const updateConfig = async (host: string, data: any) => {
   return (await axios.request(config)).data;
 };
 
+const addAuthPubkey = async (host: string, data: any) => {
+  const body = JSON.stringify(data);
+  const config = {
+    method: 'post',
+    maxBodyLength: Infinity,
+    url: `${host}/admin/addAuthPubkey`,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+  };
+  return (await axios.request(config)).data;
+};
+
 const addListenPubkey = async (host: string, data: any) => {
   const body = JSON.stringify(data);
   const config = {
@@ -119,6 +133,16 @@ const main = async function () {
   }
   {
     // add auth pubkey
+    // demo address is random
+    const authPubkey =
+      '0277130230821766ee72f50dcaa3d68bba99d20a700b6747879f904c232000684a';
+    const dto = {
+      notifyPubkey: authPubkey,
+      publicKey: pubkey,
+      publicKeySign: signMessage(privateKey, authPubkey),
+    };
+    const resp = await addAuthPubkey(host, dto);
+    console.log('authPubkey resp:', resp);
   }
   {
     // add listen pubkey
