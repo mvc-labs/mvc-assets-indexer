@@ -21,6 +21,7 @@ const ec = new EC('secp256k1');
 function sha256(message: string) {
   return Buffer.from(mvc.crypto.Hash.sha256(Buffer.from(message)), 'hex');
 }
+
 const signMessage = (pk, message: string) => {
   const key = ec.keyFromPrivate(pk.bn.toString('hex'));
   return key.sign(sha256(message)).toDER('hex');
@@ -71,6 +72,7 @@ const ec = new EC('secp256k1');
 function sha256(message: string) {
   return Buffer.from(mvc.crypto.Hash.sha256(Buffer.from(message)), 'hex');
 }
+
 const signMessage = (pk, message: string) => {
   const key = ec.keyFromPrivate(pk.bn.toString('hex'));
   return key.sign(sha256(message)).toDER('hex');
@@ -140,6 +142,7 @@ const ec = new EC('secp256k1');
 function sha256(message: string) {
   return Buffer.from(mvc.crypto.Hash.sha256(Buffer.from(message)), 'hex');
 }
+
 const signMessage = (pk, message: string) => {
   const key = ec.keyFromPrivate(pk.bn.toString('hex'));
   return key.sign(sha256(message)).toDER('hex');
@@ -191,6 +194,7 @@ const ec = new EC('secp256k1');
 function sha256(message: string) {
   return Buffer.from(mvc.crypto.Hash.sha256(Buffer.from(message)), 'hex');
 }
+
 const signMessage = (pk, message: string) => {
   const key = ec.keyFromPrivate(pk.bn.toString('hex'));
   return key.sign(sha256(message)).toDER('hex');
