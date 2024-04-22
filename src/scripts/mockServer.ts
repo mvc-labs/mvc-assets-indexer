@@ -100,15 +100,15 @@ const callback = async (context: Context) => {
           tx,
           i,
         );
+        console.log(
+          `${txid} receive ${ft.name}:`,
+          outputInfo.data.tokenAddress,
+          outputInfo.data.tokenAmount.toString(),
+          ', isPassCheck: ',
+          isPassCheck,
+        );
         if (isPassCheck) {
           // save txid, waiting confirm, then do logic
-          console.log(
-            `${txid} receive ${ft.name}:`,
-            outputInfo.data.tokenAddress,
-            outputInfo.data.tokenAmount.toString(),
-            ', isPassCheck: ',
-            isPassCheck,
-          );
         }
       }
     }
