@@ -1,17 +1,18 @@
-import { NodeRpcClient } from './node-rpc';
-import { mvc } from 'meta-contract';
+// import { NodeRpcClient } from './node-rpc';
+import { Api, API_NET, API_TARGET, mvc } from 'meta-contract';
 import { ftOutpointCheck } from './ft';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 require('dotenv').config();
 
 const main = async () => {
-  const { RPC_HOST, RPC_PORT, RPC_USER, RPC_PASSWORD } = process.env;
-  const nodeRpcClient = new NodeRpcClient(
-    RPC_HOST,
-    parseInt(RPC_PORT),
-    RPC_USER,
-    RPC_PASSWORD,
-  );
+  const api = new Api(API_NET.MAIN, API_TARGET.MVC);
+  // const { RPC_HOST, RPC_PORT, RPC_USER, RPC_PASSWORD } = process.env;
+  // const api = new NodeRpcClient(
+  //   RPC_HOST,
+  //   parseInt(RPC_PORT),
+  //   RPC_USER,
+  //   RPC_PASSWORD,
+  // );
   const testCaseList = [
     // msp transfer
     {
@@ -48,14 +49,9 @@ const main = async () => {
   ];
   for (const testCase of testCaseList) {
     const { txid, genesis, outputIndex, expected } = testCase;
-    const txHex = await nodeRpcClient.getRawTransaction(txid);
+    const txHex = await api.getRawTxData(txid);
     const tx = new mvc.Transaction(txHex);
-    const isPassCheck = await ftOutpointCheck(
-      nodeRpcClient,
-      genesis,
-      tx,
-      outputIndex,
-    );
+    const isPassCheck = await ftOutpointCheck(api, genesis, tx, outputIndex);
     console.log(
       'isPassCheck:',
       isPassCheck,

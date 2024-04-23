@@ -76,7 +76,7 @@ const callback = async (context: Context) => {
   console.log('body:', body);
   const { txid } = body;
   // 1.
-  const txHex = await nodeRpcClient.getRawTransaction(body.txid);
+  const txHex = await nodeRpcClient.getRawTxData(body.txid);
   // 2.
   const tx = new mvc.Transaction(txHex);
   for (let i = 0; i < tx.outputs.length; i++) {

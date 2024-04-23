@@ -38,7 +38,7 @@ export class NodeRpcClient {
     return await axios.request(config);
   }
 
-  public async getRawTransaction(
+  public async getRawTxData(
     txid: string,
     verbose: number = 0,
   ): Promise<string | any> {

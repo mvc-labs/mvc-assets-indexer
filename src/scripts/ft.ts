@@ -1,4 +1,4 @@
-import { mvc } from 'meta-contract';
+import { Api, mvc } from 'meta-contract';
 import { toHex } from 'mvc-scrypt';
 import { getLockingScriptFromPreimage } from 'meta-contract/dist/common/tokenUtil';
 import {
@@ -16,20 +16,20 @@ async function findAsync(arr: any, asyncCallback: any) {
 }
 
 const checkPreLockingScript = async (
-  api: NodeRpcClient,
+  api: NodeRpcClient | Api,
   input: mvc.Transaction.Input,
   lockingScriptBuf: any,
 ) => {
   const preTxId = input.prevTxId.toString('hex');
   const preOutputIndex = input.outputIndex;
-  const preTxHex = await api.getRawTransaction(preTxId);
+  const preTxHex = await api.getRawTxData(preTxId);
   const preTx = new mvc.Transaction(preTxHex);
   const preOutput = preTx.outputs[preOutputIndex].script.toBuffer();
   return preOutput.toString('hex') === lockingScriptBuf.toString('hex');
 };
 
 export const ftOutpointCheck = async (
-  api: NodeRpcClient,
+  api: NodeRpcClient | Api,
   genesis: string,
   tx: mvc.Transaction,
   outputIndex: number,
