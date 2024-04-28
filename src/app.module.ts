@@ -13,6 +13,8 @@ import { BlockModule } from './service/block/block.module';
 import { TransactionModule } from './service/transaction/transaction.module';
 import { CheckTokenModule } from './service/checkToken/checkToken.module';
 // entities
+import { ConfigEntity } from './entities/config.entity';
+import { KeyEntity } from './entities/key.entity';
 import { BlockEntity } from './entities/block.entity';
 import { TransactionEntity } from './entities/transaction.entity';
 import { TxInEntity } from './entities/txIn.entity';
@@ -24,6 +26,8 @@ import { DefaultModule } from './routes/default/default.module';
 import { TxModule } from './routes/tx/tx.module';
 import { AddressModule } from './routes/address/address.module';
 import { ContractModule } from './routes/contract/contract.module';
+import { AdminModule } from './routes/admin/admin.module';
+import { NotifyModule } from './service/notify/notify.module';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 require('dotenv').config();
@@ -40,6 +44,8 @@ require('dotenv').config();
       password: process.env.DATABASE_PASSWORD,
       database: process.env.DATABASE_DB,
       entities: [
+        ConfigEntity,
+        KeyEntity,
         BlockEntity,
         TransactionEntity,
         TxInEntity,
@@ -68,6 +74,8 @@ require('dotenv').config();
     AddressModule,
     ContractModule,
     CheckTokenModule,
+    AdminModule,
+    NotifyModule,
   ],
   controllers: [],
   providers: [],

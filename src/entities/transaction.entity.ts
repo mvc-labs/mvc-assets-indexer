@@ -4,8 +4,13 @@ import {
   Entity,
   Index,
   PrimaryColumn,
-  UpdateDateColumn,
 } from 'typeorm';
+
+export enum NotifyStatus {
+  noStart,
+  shouldNotify,
+  completed,
+}
 
 @Entity('tx')
 export class TransactionEntity {
@@ -31,17 +36,17 @@ export class TransactionEntity {
   @Column({ default: false })
   is_completed_check: boolean;
 
-  @Column('int', { generated: true })
+  @Column({ default: false })
+  is_deleted: boolean;
+
+  @Column({ default: NotifyStatus.noStart })
   @Index()
-  cursor_id: number;
+  notify_status: NotifyStatus;
 
   @Column({ default: false })
   @Index()
-  is_deleted: boolean;
+  mempool_push: boolean;
 
   @CreateDateColumn()
   created_at: Date;
-
-  @UpdateDateColumn()
-  updated_at: Date;
 }

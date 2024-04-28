@@ -118,49 +118,20 @@ export class BlockService implements OnApplicationBootstrap {
       where: {
         processStatus: BlockProcessStatus.downloaded,
       },
-      order: {
-        cursor_id: 'asc',
-      },
-      take: 100,
+      take: 1000,
     });
     if (lastNostartHeightRowArray.length > 0) {
       return lastNostartHeightRowArray;
     }
-    // before completed
-    const maxCompletedRow = await this.blockEntityRepository.findOne({
+    // before process
+    const beforeProcess = await this.blockEntityRepository.find({
       where: {
-        processStatus: BlockProcessStatus.completed,
+        processStatus: BlockProcessStatus.processing,
       },
-      order: {
-        cursor_id: 'desc',
-      },
+      take: 1,
     });
-    if (maxCompletedRow) {
-      // before process
-      const beforeProcess = await this.blockEntityRepository.find({
-        where: {
-          cursor_id: LessThan(maxCompletedRow.cursor_id),
-          processStatus: BlockProcessStatus.processing,
-        },
-        order: {
-          cursor_id: 'asc',
-        },
-        take: 100,
-      });
-      if (beforeProcess.length > 0) {
-        return beforeProcess;
-      }
-    }
-    // error completed
-    const errorCompleted = await this.blockEntityRepository
-      .createQueryBuilder('block')
-      .where(
-        ' block.processStatus = :status and block.num_tx != block.process_count',
-        { status: BlockProcessStatus.completed },
-      )
-      .getMany();
-    if (errorCompleted.length > 0) {
-      return errorCompleted;
+    if (beforeProcess.length > 0) {
+      return beforeProcess;
     }
     return [];
   }
@@ -203,21 +174,6 @@ export class BlockService implements OnApplicationBootstrap {
         processStatus: BlockProcessStatus.downloaded,
       },
     });
-    const completedCount = await this.blockEntityRepository.count({
-      where: {
-        processStatus: BlockProcessStatus.completed,
-      },
-    });
-    if (completedCount > 200) {
-      await this.blockEntityRepository.update(
-        {
-          processStatus: BlockProcessStatus.completed,
-        },
-        {
-          processStatus: BlockProcessStatus.nostart,
-        },
-      );
-    }
     const willCacheNumber = this.blockCacheNumber - downloadedCount;
     if (willCacheNumber <= 0) {
       return;
@@ -235,22 +191,15 @@ export class BlockService implements OnApplicationBootstrap {
         },
         take: willCacheNumber,
       });
-    const step = 20;
-    for (let i = 0; i < downloadBlockRows.length; i += step) {
-      const items = downloadBlockRows.slice(i, i + step);
-      try {
-        await Promise.all(
-          items.map(async (value) => {
-            try {
-              await this.downloadFile(value);
-            } catch (e) {
-              console.log('downloadBlock e', value, e);
-              await this.clearFile(value);
-            }
-          }),
-        );
-      } catch (e) {}
-    }
+    await PromisePool.withConcurrency(20)
+      .for(downloadBlockRows)
+      .process(async (value) => {
+        try {
+          await this.downloadFile(value);
+        } catch (e) {
+          await this.clearFile(value);
+        }
+      });
   }
 
   async getBlockDataHexByCache(blockHash: string) {
@@ -327,170 +276,36 @@ export class BlockService implements OnApplicationBootstrap {
     const txIdList = block.transactions.map(function (value: any) {
       return value.hash;
     });
-    {
-      const step = 300;
-      for (let i = 0; i < txIdList.length; i += step) {
-        const start = i;
-        const end = i + step;
-        const sub = txIdList.slice(start, end);
-        await this.transactionEntityRepository.update(
-          {
-            txid: In(sub),
-            is_deleted: true,
-          },
-          {
-            is_deleted: false,
-          },
-        );
-        await this.txInEntityRepository.update(
-          {
-            txid: In(sub),
-            is_deleted: true,
-          },
-          {
-            is_deleted: false,
-          },
-        );
-        await this.txOutEntityRepository.update(
-          {
-            txid: In(sub),
-            is_deleted: true,
-          },
-          {
-            is_deleted: false,
-          },
-        );
-      }
-    }
     for (let i = 0; i < txIdList.length; i++) {
       txIdIndexMap[txIdList[i]] = i;
     }
-    const _hasTxIdList: {
-      TransactionEntity_txid: string;
-      TransactionEntity_block_hash: string;
-      TransactionEntity_is_completed_check: boolean;
-      TransactionEntity_tx_in_num: number;
-      TransactionEntity_tx_in_coinbase: number;
-      TransactionEntity_tx_out_num: number;
-      TransactionEntity_tx_out_0_satoshi: number;
-    }[] = [];
-    // Todo use _subHasTxIdList check completed
-    let dbCountStatusMap = {};
-    if (!(nostartRow.processStatus !== BlockProcessStatus.downloaded)) {
-      const step = 1000;
-      for (let i = 0; i < txIdList.length; i += step) {
-        const start = i;
-        const end = i + step;
-        const sub = txIdList.slice(start, end);
-        const _subHasTxIdList = await this.transactionEntityRepository
-          .createQueryBuilder('TransactionEntity')
-          .select([
-            'TransactionEntity.txid',
-            'TransactionEntity.block_hash',
-            'TransactionEntity.is_completed_check',
-            'TransactionEntity.tx_in_num',
-            'TransactionEntity.tx_in_coinbase',
-            'TransactionEntity.tx_out_num',
-            'TransactionEntity.tx_out_0_satoshi',
-          ])
-          .where(
-            'TransactionEntity.txid in (:...txIdList) and is_deleted = false',
-            {
-              txIdList: sub,
-            },
-          )
-          .distinct(true)
-          .getRawMany();
-        _hasTxIdList.push(..._subHasTxIdList);
-      }
-      dbCountStatusMap = await this.transactionService.transactionInOutCount(
-        _hasTxIdList.map((value) => value.TransactionEntity_txid),
-      );
-    }
-    const existTxIdMap = {};
-    const hasTxIdList = [];
-    _hasTxIdList.map((value) => {
-      const dbCountStatus = dbCountStatusMap[value.TransactionEntity_txid];
-      if (dbCountStatus) {
-        const value_tx_in_num =
-          value.TransactionEntity_tx_in_num -
-          value.TransactionEntity_tx_in_coinbase;
-        const value_tx_out_num =
-          value.TransactionEntity_tx_out_num -
-          value.TransactionEntity_tx_out_0_satoshi;
-        if (
-          dbCountStatus.tx_in_num == value_tx_in_num &&
-          dbCountStatus.tx_out_num == value_tx_out_num &&
-          value.TransactionEntity_block_hash == nostartRow.hash
-        ) {
-          existTxIdMap[value.TransactionEntity_txid] = true;
-          hasTxIdList.push(value.TransactionEntity_txid);
-        }
-      }
-    });
-    const notExistsTxIdList = [];
-    let notExistsCount = 0;
-    for (let i = 0; i < txIdList.length; i++) {
-      const _id = txIdList[i];
-      if (!existTxIdMap[_id]) {
-        notExistsTxIdList.push(_id);
-        notExistsCount += 1;
-      }
-    }
     nostartRow.processStatus = BlockProcessStatus.processing;
-    nostartRow.process_count = txIdList.length - notExistsCount;
-    if (txIdList.length > 0) {
-      const step = 100;
-      for (let i = 0; i < txIdList.length; i += step) {
-        const start = i;
-        const end = i + step;
-        const subTxIdList = txIdList.slice(start, end);
-        this.transactionEntityRepository
-          .createQueryBuilder()
-          .update(TransactionEntity)
-          .set({ block_hash: nostartRow.hash, is_completed_check: true })
-          .where(' txid in (:...hasTxIdList)', { hasTxIdList: subTxIdList })
-          .execute()
-          .then()
-          .catch();
-      }
-    }
-    this.logger.debug(
-      `notExistsCount ${notExistsCount} allTxCount ${nostartRow.num_tx}`,
-    );
-    let lastRow: any;
-    if (notExistsCount === 0) {
-      nostartRow.process_count = nostartRow.num_tx;
-      nostartRow.processStatus = BlockProcessStatus.completed;
-      await this.clearBlockDataCache(nostartRow.hash);
-    } else {
-      for (let i = 0; i < notExistsTxIdList.length - 1; i++) {
-        const _txid = notExistsTxIdList[i];
-        const _txidIndex = txIdIndexMap[_txid];
-        const txHex = block.transactions[_txidIndex].serialize(true);
-        this.transactionService.txFromBlock(
-          nostartRow.height,
-          nostartRow.hash,
-          nostartRow.num_tx,
-          false,
-          _txid,
-          txHex,
-          this.clearBlockDataCache.bind(this),
-        );
-      }
-      const _txid = notExistsTxIdList[notExistsTxIdList.length - 1];
+    for (let i = 0; i < txIdList.length - 1; i++) {
+      const _txid = txIdList[i];
       const _txidIndex = txIdIndexMap[_txid];
-      const txHex = block.transactions[_txidIndex].serialize(true);
-      lastRow = [
+      const tx = block.transactions[_txidIndex];
+      this.transactionService.txFromBlock(
         nostartRow.height,
         nostartRow.hash,
         nostartRow.num_tx,
-        true,
+        false,
         _txid,
-        txHex,
+        tx,
         this.clearBlockDataCache.bind(this),
-      ];
+      );
     }
+    const _txid = txIdList[txIdList.length - 1];
+    const _txidIndex = txIdIndexMap[_txid];
+    const tx = block.transactions[_txidIndex];
+    const lastRow = [
+      nostartRow.height,
+      nostartRow.hash,
+      nostartRow.num_tx,
+      true,
+      _txid,
+      tx,
+      this.clearBlockDataCache.bind(this),
+    ];
     try {
       await this.blockEntityRepository.save(nostartRow);
     } catch (e) {}
@@ -498,9 +313,24 @@ export class BlockService implements OnApplicationBootstrap {
   }
   //
   async processBlock() {
-    const nostartRowArray = await this.lastNostartRowArray();
-    const { results } = await PromisePool.withConcurrency(3)
-      .for(nostartRowArray)
+    if (this.transactionService.isFull()) {
+      return 0;
+    }
+    const noStartRowArray = await this.lastNostartRowArray();
+    const selectArray = [];
+    let txNumber = this.transactionService.txCacheNumber();
+    for (const block of noStartRowArray) {
+      txNumber += Number(block.num_tx);
+      selectArray.push(block);
+      if (txNumber > this.transactionService.txMempoolQueueMax) {
+        break;
+      }
+    }
+    const hasProcess =
+      selectArray.map((value) => value.processStatus)[0] ===
+      BlockProcessStatus.processing;
+    const { results } = await PromisePool.withConcurrency(5)
+      .for(selectArray)
       .process(async (blockEntity) => {
         return await this.processOneBlock(blockEntity);
       });
@@ -526,6 +356,11 @@ export class BlockService implements OnApplicationBootstrap {
         );
       }
     }
+    if (hasProcess) {
+      await sleep(3000);
+      return 0;
+    }
+    return selectArray.length;
   }
 
   async processPendingBlock() {
@@ -838,47 +673,56 @@ export class BlockService implements OnApplicationBootstrap {
   }
   //
   private async daemonProcessBlock() {
+    let l = 0;
     while (true) {
       try {
-        await this.processBlock();
+        l = await this.processBlock();
       } catch (e) {
         console.log('daemonProcessBlock error', e);
       }
-      await sleep(this.blockDownloadMS);
+      if (l === 0) {
+        await sleep(this.blockDownloadMS);
+      }
     }
   }
 
-  private async doubleCheckBlock() {
-    const completedBlock = await this.blockEntityRepository.findOne({
-      where: {
-        processStatus: BlockProcessStatus.completed,
-        is_reorg: false,
-      },
-      order: {
-        cursor_id: 'asc',
-      },
-    });
+  private async doubleCheckBlock(completedBlock: BlockEntity) {
     if (completedBlock) {
-      const records: any[] = await this.transactionEntityRepository
+      const p1 = this.transactionEntityRepository
         .createQueryBuilder('tx')
         .where(' block_hash = :block_hash', {
           block_hash: completedBlock.hash,
         })
         .select([])
-        .addSelect('is_completed_check')
-        .addSelect('COUNT(*)', 'completed_count')
-        .groupBy('is_completed_check')
+        .addSelect('SUM(tx.tx_in_num)', 'tx_in_num_total')
+        .addSelect('SUM(tx.tx_out_num)', 'tx_out_num_total')
+        .addSelect('SUM(tx.tx_out_0_satoshi)', 'tx_out_0_satoshi_total')
         .getRawMany();
-      let pass = false;
-      for (const record of records) {
-        if (
-          record.is_completed_check === 1 &&
-          Number(record.completed_count) === completedBlock.num_tx
-        ) {
-          pass = true;
-          break;
-        }
-      }
+      const p2 = this.transactionEntityRepository.query(
+        `
+        SELECT COUNT(*) as ct FROM tx JOIN tx_in ON tx.txid = tx_in.txid WHERE block_hash = ?
+      `,
+        [completedBlock.hash],
+      );
+      const p3 = this.transactionEntityRepository.query(
+        `
+            SELECT COUNT(*) as ct FROM tx JOIN tx_out ON tx.txid = tx_out.txid WHERE block_hash = ? `,
+        [completedBlock.hash],
+      );
+      const [records, txInCountRaw, txOutCountRaw] = await Promise.all([
+        p1,
+        p2,
+        p3,
+      ]);
+      const record = records[0];
+      const txInCount = Number(txInCountRaw[0].ct || '0');
+      const txOutCount = Number(txOutCountRaw[0].ct || '0');
+      const expectedTxInNumber = Number(record.tx_in_num_total || '1') - 1;
+      const expectedTxOutNumber =
+        Number(record.tx_out_num_total || '1') -
+        Number(record.tx_out_0_satoshi_total || '0');
+      const pass =
+        expectedTxInNumber === txInCount && expectedTxOutNumber == txOutCount;
       if (pass) {
         await this.blockEntityRepository.update(
           { hash: completedBlock.hash },
@@ -886,6 +730,11 @@ export class BlockService implements OnApplicationBootstrap {
             processStatus: BlockProcessStatus.doubleCheck,
           },
         );
+        await this.transactionEntityRepository.update(
+          { block_hash: completedBlock.hash },
+          { is_completed_check: true },
+        );
+        this.logger.debug(`block ${completedBlock.hash} double check pass`);
       } else {
         this.logger.debug(
           `update block from ${completedBlock.hash} to nostart, doubleCheckBlock`,
@@ -906,9 +755,29 @@ export class BlockService implements OnApplicationBootstrap {
   private async daemonDoubleCheckBlock() {
     while (true) {
       try {
-        const ct = await this.doubleCheckBlock();
-        if (!ct) {
-          await sleep(1000);
+        const beforeCompletedNumber = await this.blockEntityRepository.count({
+          where: {
+            processStatus: LessThan(BlockProcessStatus.completed),
+          },
+        });
+        if (beforeCompletedNumber < 200) {
+          const completedBlockList = await this.blockEntityRepository.find({
+            where: {
+              processStatus: BlockProcessStatus.completed,
+              is_reorg: false,
+            },
+            take: 500,
+          });
+          await PromisePool.withConcurrency(4)
+            .for(completedBlockList)
+            .process(async (block) => {
+              await this.doubleCheckBlock(block);
+            });
+          if (completedBlockList.length === 0) {
+            await sleep(1000);
+          }
+        } else {
+          await sleep(10000);
         }
       } catch (e) {
         console.log('daemonDoubleCheckBlock error', e);

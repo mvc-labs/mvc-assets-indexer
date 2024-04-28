@@ -162,7 +162,6 @@ export class RpcService {
       await this.objLoader.downloadToFile(blockHash, path);
       return true;
     } catch (e) {
-      console.log('getRawBlockByRest', e);
       return false;
     }
   }

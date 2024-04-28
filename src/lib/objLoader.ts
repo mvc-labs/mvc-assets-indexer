@@ -97,7 +97,6 @@ export class ObjLoader {
               task.chunk_index * task.chunk_size,
             );
           } catch (e) {
-            console.log('downloadToFile:', e);
             throw e;
           }
         });

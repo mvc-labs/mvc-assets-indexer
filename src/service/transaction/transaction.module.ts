@@ -10,6 +10,7 @@ import { TxInEntity } from '../../entities/txIn.entity';
 import { TxOutEntity } from '../../entities/txOut.entity';
 import { TxOutNftEntity } from '../../entities/txOutNftEntity';
 import { TxOutFtEntity } from '../../entities/txOutFtEntity';
+import { AdminModule } from '../../routes/admin/admin.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { TxOutFtEntity } from '../../entities/txOutFtEntity';
     ConfigModule,
     RpcModule,
     ZmqModule,
+    AdminModule,
   ],
   providers: [TransactionService],
   exports: [TransactionService],

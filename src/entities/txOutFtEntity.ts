@@ -10,7 +10,6 @@ export class TxOutFtEntity {
   txid: string;
 
   @Column({ length: 40 })
-  @Index()
   codeHash: string;
 
   @Column({ length: 40 })

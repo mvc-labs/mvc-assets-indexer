@@ -46,16 +46,11 @@ export class TxOutEntity {
   satoshis: number;
 
   @Column({ default: false })
-  @Index()
   is_deleted: boolean;
 
   @Column({ default: false })
-  @Index()
   is_used: boolean;
 
   @CreateDateColumn()
   created_at: Date;
-
-  @UpdateDateColumn()
-  updated_at: Date;
 }
