@@ -43,6 +43,43 @@ npm run start:dev
 npm run start:prod
 ```
 
+## Benchmark
+
+### Database
+
+- Operating System: Ubuntu 20.04
+- CPU: 2 cores
+- RAM: 8GB;
+- MySQL version: 8.0.22
+- mysql cnf
+
+```
+# Default Homebrew MySQL server config
+[mysqld]
+# Only allow connections from localhost
+bind-address = 127.0.0.1
+mysqlx-bind-address = 127.0.0.1
+innodb_buffer_pool_instances = 4
+innodb_buffer_pool_size = 4G
+innodb_buffer_pool_chunk_size = 1G
+innodb_read_io_threads = 8
+innodb_parallel_read_threads = 16
+innodb_write_io_threads = 8
+```
+### Server
+
+- Operating System: Ubuntu 20.04
+- CPU: 2 cores
+- RAM: 8GB;
+- NODE_OPTIONS="--max-old-space-size=4096"
+
+### Performance
+
+| Tx numbers | Block numbers | Block per tx | Index time (s) |  Tps   |
+|:----------:|:-------------:|:------------:|:--------------:|:------:|
+|  6242999   |     68397     |     91.3     |     26028      | 239.86 |
+
+
 ## Changelog
 
 ### v1.4.9 (2024-04-22)
